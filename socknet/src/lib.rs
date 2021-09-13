@@ -17,3 +17,7 @@ pub mod socket;
 pub mod serde {
 	pub use rmp_serde::{from_read_ref, to_vec};
 }
+
+pub(crate) enum InternalMessage {
+	DropConnection(std::net::SocketAddr),
+}

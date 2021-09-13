@@ -24,4 +24,7 @@ impl super::ISocket for Socket {
 	fn manual_poll(&mut self, time: std::time::Instant) {
 		self.0.manual_poll(time);
 	}
+	fn kick(&mut self, address: &SocketAddr) {
+		self.0.kick(address);
+	}
 }

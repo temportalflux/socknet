@@ -12,4 +12,5 @@ pub trait ISocket {
 	fn get_packet_sender(&self) -> channel::Sender<backend::Packet>;
 	fn get_event_receiver(&self) -> channel::Receiver<backend::Event>;
 	fn manual_poll(&mut self, time: std::time::Instant);
+	fn kick(&mut self, address: &SocketAddr);
 }

@@ -1,8 +1,7 @@
-use crate::{channel,backend, event, packet, AnyError};
+use crate::{backend, channel, event, packet, AnyError};
 use std::{
-	collections::VecDeque,
 	net::{IpAddr, Ipv4Addr, SocketAddr},
-	sync::{atomic::AtomicBool, Arc, Mutex},
+	sync::{atomic::AtomicBool, Arc},
 	thread::{self, JoinHandle},
 	time::Duration,
 };
@@ -43,11 +42,18 @@ where
 		..Default::default()
 	};
 	let socket = TSocketFactory::build(address, config)?;
+	let (internal_sender, internal_receiver) = channel::unbounded();
 	let outgoing_queue = packet::Queue::new(
 		format!("{}:outgoing", name),
 		socket.get_packet_sender(),
 		&exit_flag,
+		internal_sender,
 	)?;
-	let incoming_queue = event::Queue::new(format!("{}:incoming", name), socket, &exit_flag)?;
+	let incoming_queue = event::Queue::new(
+		format!("{}:incoming", name),
+		socket,
+		&exit_flag,
+		internal_receiver,
+	)?;
 	Ok((outgoing_queue, incoming_queue))
 }
