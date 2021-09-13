@@ -14,7 +14,7 @@ socknet-derive = { version = "0.1.0", optional = true, path = "../derive" }
 # [networking] dependency from `laminar` used to send packers/receive events
 crossbeam-channel = "0.5"
 # [networking] for making socket connections and polling for data
-laminar = "0.5.0"
+laminar = { path = "./laminar" }
 log = "0.4"
 # [serialization] expanded serialization support
 rmp = "0.8"
