@@ -32,7 +32,7 @@ impl From<laminar::OrderingGuarantee> for OrderGuarantee {
 	}
 }
 
-/// See https://docs.rs/laminar/0.5.0/laminar/struct.Packet.html for more on the kinds of guarantees.
+/// See `<https://docs.rs/laminar/0.5.0/laminar/struct.Packet.html>` for more on the kinds of guarantees.
 #[derive(Debug, Clone, Copy)]
 pub struct Guarantee {
 	pub(super) delivery: DeliveryGuarantee,
