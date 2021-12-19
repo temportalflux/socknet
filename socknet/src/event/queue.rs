@@ -66,10 +66,10 @@ impl Queue {
 				// found event, add to queue and continue the loop
 				Ok(event) => {
 					let event = event.into();
-					
+
 					let profiling_tag = format!("{:?}", event);
 					profiling::scope!("forward_event", profiling_tag.as_str());
-					
+
 					match laminar_to_socknet_sender.try_send(event) {
 						Ok(_) => {}                            // success case is no-op
 						Err(TrySendError::Full(_packet)) => {} // no-op, the channel is unbounded
