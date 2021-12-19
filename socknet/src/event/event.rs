@@ -1,13 +1,25 @@
 use crate::packet::Packet;
 use std::net::SocketAddr;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum Event {
 	Connected(SocketAddr),
 	TimedOut(SocketAddr),
 	Disconnected(SocketAddr),
 	Packet(Packet),
 	Stop,
+}
+
+impl std::fmt::Debug for Event {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::Connected(address) => write!(f, "Connected({})", address),
+			Self::TimedOut(address) => write!(f, "TimedOut({})", address),
+			Self::Disconnected(address) => write!(f, "Disconnected({})", address),
+			Self::Packet(packet) => write!(f, "Packet({:?})", packet),
+			Self::Stop => write!(f, "Stop"),
+		}
+	}
 }
 
 impl From<laminar::SocketEvent> for Event {

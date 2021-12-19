@@ -32,6 +32,7 @@ impl Queue {
 		let internal_receiver = internal_receiver.clone();
 		let thread_exit_flag = exit_flag.clone();
 		let thread_poll_events = Some(build_thread(name, move || {
+			profiling::register_thread!("socknet-receiver");
 			Self::poll_events(
 				socket,
 				laminar_to_socknet_sender,
@@ -56,6 +57,7 @@ impl Queue {
 		use crossbeam_channel::{TryRecvError, TrySendError};
 		// equivalent to `laminar::Socket::start_polling`, with the addition of moving packets into the destination queue
 		loop {
+			profiling::scope!("poll_events");
 			if exit_flag.load(atomic::Ordering::Relaxed) {
 				break;
 			}
@@ -64,6 +66,10 @@ impl Queue {
 				// found event, add to queue and continue the loop
 				Ok(event) => {
 					let event = event.into();
+					
+					let profiling_tag = format!("{:?}", event);
+					profiling::scope!("forward_event", profiling_tag.as_str());
+					
 					match laminar_to_socknet_sender.try_send(event) {
 						Ok(_) => {}                            // success case is no-op
 						Err(TrySendError::Full(_packet)) => {} // no-op, the channel is unbounded

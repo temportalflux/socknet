@@ -16,6 +16,8 @@ crossbeam-channel = "0.5"
 # [networking] for making socket connections and polling for data
 laminar = { path = "./laminar" }
 log = "0.4"
+# [utility] for getting performance information and rendering via any chosen viewer
+profiling = "1.0"
 # [serialization] expanded serialization support
 rmp = "0.8"
 # [serialization] expanded serialization support for serde

@@ -25,6 +25,7 @@ impl Queue {
 
 		let thread_exit_flag = exit_flag.clone();
 		let thread_send_packets = Some(build_thread(name, move || {
+			profiling::register_thread!("socknet-sender");
 			Self::send_packets(
 				socknet_to_laminar_receiver,
 				laminar_sender,
@@ -47,6 +48,7 @@ impl Queue {
 		use crossbeam_channel::{TryRecvError, TrySendError};
 		let mut next_packet: Option<laminar::Packet> = None;
 		loop {
+			profiling::scope!("send_packets");
 			if exit_flag.load(atomic::Ordering::Relaxed) {
 				break;
 			}
@@ -54,6 +56,9 @@ impl Queue {
 				match socknet_to_laminar_receiver.try_recv() {
 					// found event, add to queue and continue the loop
 					Ok(socknet_packet) => {
+						let profiling_tag = format!("{:?}", socknet_packet);
+						profiling::scope!("send_packet", profiling_tag.as_str());
+
 						next_packet = Some(socknet_packet.into());
 					}
 					// no events, continue the loop after a short nap
