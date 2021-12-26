@@ -33,7 +33,7 @@ pub struct PacketBuilder {
 	include_addresses: HashSet<SocketAddr>,
 	exclude_addresses: HashSet<SocketAddr>,
 	guarantee: Guarantee,
-	payload: Payload,
+	payloads: Vec<Payload>,
 }
 
 impl Default for PacketBuilder {
@@ -46,7 +46,7 @@ impl Default for PacketBuilder {
 			include_addresses: HashSet::new(),
 			exclude_addresses: HashSet::new(),
 			guarantee: Unreliable + Unordered,
-			payload: Payload::default(),
+			payloads: Vec::with_capacity(1),
 		}
 	}
 }
@@ -113,12 +113,25 @@ impl PacketBuilder {
 	where
 		T: Kind,
 	{
-		self.payload = Payload::from(payload);
+		self.add_payload(payload);
 		self
 	}
 
-	pub fn packet_kind(&self) -> &String {
-		self.payload.kind()
+	pub fn with_payloads<T>(mut self, payloads: &[T]) -> Self
+	where
+		T: Kind,
+	{
+		for payload in payloads.iter() {
+			self.add_payload(payload);
+		}
+		self
+	}
+
+	pub fn add_payload<T>(&mut self, payload: &T)
+	where
+		T: Kind,
+	{
+		self.payloads.push(Payload::from(payload));
 	}
 
 	pub fn into_addresses<T: AddressReference>(&self, reference: &T) -> Vec<SocketAddr> {
@@ -153,14 +166,18 @@ impl PacketBuilder {
 	}
 
 	pub fn into_packets<T: AddressReference>(self, reference: &T) -> Vec<Packet> {
-		self.into_addresses(reference)
-			.into_iter()
-			.map(|address| Packet {
-				address,
-				guarantee: self.guarantee.clone(),
-				payload: self.payload.clone(),
-			})
-			.collect()
+		let addresses = self.into_addresses(reference);
+		let mut packets = Vec::with_capacity(addresses.len() * self.payloads.len());
+		for payload in self.payloads.into_iter() {
+			for &address in addresses.iter() {
+				packets.push(Packet {
+					address,
+					guarantee: self.guarantee.clone(),
+					payload: payload.clone(),
+				});
+			}
+		}
+		packets
 	}
 }
 
