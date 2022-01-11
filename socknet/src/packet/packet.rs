@@ -131,6 +131,7 @@ impl PacketBuilder {
 	where
 		T: Kind,
 	{
+		profiling::scope!("add_payload", T::unique_id());
 		self.payloads.push(Payload::from(payload));
 	}
 

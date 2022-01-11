@@ -50,12 +50,16 @@ pub fn packet_kind(args: TokenStream, input: TokenStream) -> TokenStream {
 		}
 		impl #socknet_crate_path::packet::Kind for #name {
 			fn serialize_to(&self) -> Vec<u8> {
+				use #socknet_crate_path::packet::Registerable;
+				profiling::scope!("packet-serialize", #name::unique_id());
 				#socknet_crate_path::serde::to_vec(&self).unwrap()
 			}
 			fn deserialize_from(bytes: &[u8]) -> Box<dyn std::any::Any + 'static + Send>
 			where
 				Self: Sized,
 			{
+				use #socknet_crate_path::packet::Registerable;
+				profiling::scope!("packet-deserialize", #name::unique_id());
 				Box::new(#socknet_crate_path::serde::from_read_ref::<[u8], #name>(&bytes).unwrap())
 			}
 		}
