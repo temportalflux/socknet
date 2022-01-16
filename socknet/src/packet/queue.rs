@@ -56,8 +56,7 @@ impl Queue {
 				match socknet_to_laminar_receiver.try_recv() {
 					// found event, add to queue and continue the loop
 					Ok(socknet_packet) => {
-						let profiling_tag = format!("{:?}", socknet_packet);
-						profiling::scope!("send_packet", profiling_tag.as_str());
+						profiling::scope!("send_packet", &format!("{:?}", socknet_packet));
 
 						next_packet = Some(socknet_packet.into());
 					}

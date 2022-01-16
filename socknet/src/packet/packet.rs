@@ -244,6 +244,24 @@ impl Into<laminar::Packet> for Packet {
 		use DeliveryGuarantee::*;
 		use OrderGuarantee::*;
 		let raw_payload = rmp_serde::to_vec(&self.payload).unwrap();
+		let payload_size = raw_payload.len();
+		if payload_size > crate::socket::MAX_PACKET_SIZE {
+			log::error!(
+				target: crate::LOG,
+				"{:?} payload size {} exceeds max packet size ({} bytes). Packet will fail.",
+				self,
+				payload_size,
+				crate::socket::MAX_PACKET_SIZE
+			);
+		} else if payload_size >= crate::socket::FRAGMENT_SIZE as usize {
+			log::warn!(
+				target: crate::LOG,
+				"{:?} payload has a size of {} which exceeds {} bytes, it will be fragmented.",
+				self,
+				payload_size,
+				crate::socket::FRAGMENT_SIZE
+			);
+		}
 		match self.guarantee {
 			Guarantee {
 				delivery: Unreliable,

@@ -11,6 +11,14 @@ pub mod default;
 mod factory;
 pub use factory::*;
 
+/// The maximum size a given packet can be. If a packet is larger than this, it will be fragmented.
+/// It defaults to `1450` bytes, due to the default MTU on most network devices being `1500`.
+pub static FRAGMENT_SIZE: u16 = 1450;
+/// Value which can specify the maximum size a packet can be in bytes.
+/// This value is inclusive of fragmenting; if a packet is fragmented,
+/// the total size of the fragments cannot exceed this value.
+pub static MAX_PACKET_SIZE: usize = 16384;
+
 pub(crate) fn build_thread<F, T>(name: String, f: F) -> std::io::Result<JoinHandle<T>>
 where
 	F: FnOnce() -> T,
@@ -39,6 +47,9 @@ where
 	let config = backend::Config {
 		idle_connection_timeout: Duration::from_secs(5),
 		heartbeat_interval: Some(Duration::from_millis(2 * 1000)),
+		max_packet_size: MAX_PACKET_SIZE,
+		fragment_size: FRAGMENT_SIZE,
+		receive_buffer_max_size: FRAGMENT_SIZE as usize,
 		..Default::default()
 	};
 	let socket = TSocketFactory::build(address, config)?;
