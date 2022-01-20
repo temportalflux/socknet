@@ -1,6 +1,3 @@
-pub type AnyError = Box<dyn std::error::Error>;
-pub type VoidResult = std::result::Result<(), AnyError>;
-
 pub static LOG: &'static str = "socknet";
 
 #[cfg(feature = "derive")]

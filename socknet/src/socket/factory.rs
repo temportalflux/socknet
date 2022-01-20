@@ -1,11 +1,11 @@
-use crate::{backend, channel, AnyError};
+use crate::{backend, channel};
 use std::net::SocketAddr;
 
 pub trait Factory {
 	fn build(
 		address: SocketAddr,
 		config: backend::Config,
-	) -> Result<Box<dyn ISocket + Send>, AnyError>;
+	) -> anyhow::Result<Box<dyn ISocket + Send>>;
 }
 
 pub trait ISocket {

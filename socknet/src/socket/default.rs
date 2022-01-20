@@ -1,4 +1,4 @@
-use crate::{backend, channel, AnyError};
+use crate::{backend, channel};
 use std::net::SocketAddr;
 
 pub struct Factory();
@@ -6,7 +6,7 @@ impl super::Factory for Factory {
 	fn build(
 		address: SocketAddr,
 		config: backend::Config,
-	) -> Result<Box<dyn super::ISocket + Send>, AnyError> {
+	) -> anyhow::Result<Box<dyn super::ISocket + Send>> {
 		Ok(Box::new(Socket(laminar::Socket::bind_with_config(
 			address, config,
 		)?)))

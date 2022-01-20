@@ -2,7 +2,6 @@ use crate::{
 	channel,
 	event::Event,
 	socket::{build_thread, ISocket},
-	AnyError,
 };
 use std::{
 	sync::{
@@ -25,7 +24,7 @@ impl Queue {
 		socket: Box<dyn ISocket + Send>,
 		exit_flag: &Arc<AtomicBool>,
 		internal_receiver: channel::Receiver<crate::InternalMessage>,
-	) -> Result<Self, AnyError> {
+	) -> anyhow::Result<Self> {
 		let (sender, receiver) = crossbeam_channel::unbounded();
 
 		let laminar_to_socknet_sender = sender.clone();
@@ -66,9 +65,7 @@ impl Queue {
 				// found event, add to queue and continue the loop
 				Ok(event) => {
 					let event = event.into();
-
-					let profiling_tag = format!("{:?}", event);
-					profiling::scope!("forward_event", profiling_tag.as_str());
+					profiling::scope!("forward_event", &format!("{:?}", event));
 
 					match laminar_to_socknet_sender.try_send(event) {
 						Ok(_) => {}                            // success case is no-op

@@ -1,4 +1,4 @@
-use crate::{backend, channel, event, packet, AnyError};
+use crate::{backend, channel, event, packet};
 use std::{
 	net::{IpAddr, Ipv4Addr, SocketAddr},
 	sync::{atomic::AtomicBool, Arc},
@@ -31,14 +31,14 @@ where
 pub fn start(
 	port: u16,
 	exit_flag: &Arc<AtomicBool>,
-) -> Result<(packet::Queue, event::Queue), AnyError> {
+) -> anyhow::Result<(packet::Queue, event::Queue)> {
 	start_as::<default::Factory>(port, exit_flag)
 }
 
 pub fn start_as<TSocketFactory>(
 	port: u16,
 	exit_flag: &Arc<AtomicBool>,
-) -> Result<(packet::Queue, event::Queue), AnyError>
+) -> anyhow::Result<(packet::Queue, event::Queue)>
 where
 	TSocketFactory: Factory,
 {

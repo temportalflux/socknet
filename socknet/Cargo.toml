@@ -10,6 +10,7 @@ edition = "2018"
 derive = ["socknet-derive"]
 
 [dependencies]
+anyhow = "1.0"
 socknet-derive = { version = "0.1.0", optional = true, path = "../derive" }
 # [networking] dependency from `laminar` used to send packers/receive events
 crossbeam-channel = "0.5"

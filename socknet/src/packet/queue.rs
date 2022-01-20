@@ -1,4 +1,4 @@
-use crate::{channel, packet, socket::build_thread, AnyError};
+use crate::{channel, packet, socket::build_thread};
 use std::{
 	sync::{
 		atomic::{self, AtomicBool},
@@ -20,7 +20,7 @@ impl Queue {
 		laminar_sender: crossbeam_channel::Sender<laminar::Packet>,
 		exit_flag: &Arc<AtomicBool>,
 		internal_sender: channel::Sender<crate::InternalMessage>,
-	) -> Result<Self, AnyError> {
+	) -> anyhow::Result<Self> {
 		let (sender, socknet_to_laminar_receiver) = crossbeam_channel::unbounded();
 
 		let thread_exit_flag = exit_flag.clone();
@@ -85,7 +85,7 @@ impl Queue {
 		&self.sender
 	}
 
-	pub fn kick(&self, address: std::net::SocketAddr) -> crate::VoidResult {
+	pub fn kick(&self, address: std::net::SocketAddr) -> anyhow::Result<()> {
 		self.internal_sender
 			.try_send(crate::InternalMessage::DropConnection(address))?;
 		Ok(())
