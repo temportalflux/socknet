@@ -8,6 +8,8 @@ edition = "2018"
 
 [features]
 derive = ["socknet-derive"]
+rustls-logging = ["rustls/logging"]
+rustls-dangerous = ["rustls/dangerous_configuration"]
 
 [dependencies]
 anyhow = "1.0"
@@ -26,3 +28,11 @@ rmp-serde = "0.15"
 # [serialization]
 serde = { version = "1.0", features = ["derive"] }
 temportal-engine-utilities = { path = "../../utility" }
+
+async-channel = "1.6"
+futures = "0.3"
+tokio = { version = "1.15", features = ["full"] }
+quinn = "0.8"
+rustls = { version = "0.20", default-features = false, features = ["tls12"] }
+futures-util = "0.3"
+bytes = "1.1"
