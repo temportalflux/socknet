@@ -2,7 +2,7 @@ use crate::{
 	endpoint::{self, Endpoint},
 	stream,
 };
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 pub struct Config {
 	pub endpoint: endpoint::Config,
@@ -12,23 +12,24 @@ pub struct Config {
 }
 
 impl Config {
-	pub fn build(self) -> anyhow::Result<Endpoint> {
+	pub fn build(self) -> anyhow::Result<Arc<Endpoint>> {
 		log::info!(target: crate::LOG, "Creating network on {}", self.address);
 		match self.endpoint {
 			endpoint::Config::Server(config) => {
 				let (endpoint, incoming) = quinn::Endpoint::server(config, self.address)?;
-				let mut socket = Endpoint::new(endpoint, self.stream_processor, self.error_sender);
-				socket.listen_for_connections(incoming);
-				Ok(socket)
+				let mut endpoint =
+					Endpoint::new(endpoint, self.stream_processor, self.error_sender);
+				endpoint.listen_for_connections(incoming);
+				Ok(Arc::new(endpoint))
 			}
 			endpoint::Config::Client(config) => {
 				let mut endpoint = quinn::Endpoint::client(self.address)?;
 				endpoint.set_default_client_config(config);
-				Ok(Endpoint::new(
+				Ok(Arc::new(Endpoint::new(
 					endpoint,
 					self.stream_processor,
 					self.error_sender,
-				))
+				)))
 			}
 		}
 	}

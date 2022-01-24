@@ -4,8 +4,8 @@ use crate::{
 };
 use std::{net::SocketAddr, sync::Arc};
 
-pub type Sender = async_channel::Sender<Connection>;
-pub type Receiver = async_channel::Receiver<Connection>;
+pub type Sender = async_channel::Sender<Arc<Connection>>;
+pub type Receiver = async_channel::Receiver<Arc<Connection>>;
 
 pub struct Connection {
 	connection: quinn::Connection,
@@ -25,16 +25,22 @@ impl Connection {
 
 impl Drop for Connection {
 	fn drop(&mut self) {
-		log::info!(target: crate::LOG, "Closing connection to {}", self.remote_address());
+		log::info!(
+			target: crate::LOG,
+			"Closing connection to {}",
+			self.remote_address()
+		);
 	}
 }
 
 impl Connection {
 	pub(crate) fn create(
 		connection: quinn::NewConnection,
+		sender: Sender,
 		stream_processor: ArcProcessor,
 		error_sender: stream::error::Sender,
-	) -> Self {
+	) -> Arc<Self> {
+		use async_channel::TrySendError;
 		let address = connection.connection.remote_address();
 		let handles = Arc::new(JoinHandleList::with_capacity(3));
 
@@ -63,10 +69,30 @@ impl Connection {
 			handles.clone(),
 		);
 
-		Self {
+		let connection = Arc::new(Self {
 			connection: connection.connection,
 			handles,
+		});
+
+		match sender.try_send(connection.clone()) {
+			Ok(_) => {}
+			Err(TrySendError::Full(connection)) => {
+				log::error!(
+					target: crate::LOG,
+					"Failed to enqueue new connection from {}, the connection queue is full.",
+					connection.remote_address()
+				);
+			}
+			Err(TrySendError::Closed(connection)) => {
+				log::error!(
+					target: crate::LOG,
+					"Failed to enqueue new connection from {}, the connection queue is no longer accepting connections.",
+					connection.remote_address()
+				);
+			}
 		}
+
+		connection
 	}
 
 	fn spawn_stream_handler<T, TStream>(
