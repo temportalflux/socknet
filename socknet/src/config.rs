@@ -16,17 +16,24 @@ impl Config {
 		log::info!(target: crate::LOG, "Creating network on {}", self.address);
 		match self.endpoint {
 			endpoint::Config::Server(config) => {
-				let (endpoint, incoming) = quinn::Endpoint::server(config, self.address)?;
-				let mut endpoint =
-					Endpoint::new(endpoint, self.stream_processor, self.error_sender);
+				let (endpoint, incoming) = quinn::Endpoint::server(config.core, self.address)?;
+				let endpoint = Arc::new(Endpoint::new(
+					endpoint,
+					config.certificate,
+					config.private_key,
+					self.stream_processor,
+					self.error_sender,
+				));
 				endpoint.listen_for_connections(incoming);
-				Ok(Arc::new(endpoint))
+				Ok(endpoint)
 			}
 			endpoint::Config::Client(config) => {
 				let mut endpoint = quinn::Endpoint::client(self.address)?;
-				endpoint.set_default_client_config(config);
+				endpoint.set_default_client_config(config.core);
 				Ok(Arc::new(Endpoint::new(
 					endpoint,
+					config.certificate,
+					config.private_key,
 					self.stream_processor,
 					self.error_sender,
 				)))

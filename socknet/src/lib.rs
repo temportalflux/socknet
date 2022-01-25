@@ -3,7 +3,7 @@ pub use crossbeam_channel as channel;
 pub static LOG: &'static str = "socknet";
 
 #[cfg(feature = "derive")]
-pub use socknet_derive::packet_kind;
+pub use socknet_derive::{initiator, packet_kind, responder};
 
 // OLD
 pub mod event;

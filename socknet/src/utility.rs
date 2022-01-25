@@ -49,3 +49,14 @@ where
 		}
 	})
 }
+
+pub fn fingerprint(certificate: &rustls::Certificate) -> String {
+	use base64ct::{Base64UrlUnpadded, Encoding};
+	use sha2::{Digest, Sha256};
+
+	let mut hasher = Sha256::new();
+	hasher.update(&certificate.0[..]);
+	let hash = hasher.finalize();
+
+	Base64UrlUnpadded::encode_string(&hash)
+}

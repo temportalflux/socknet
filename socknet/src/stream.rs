@@ -1,4 +1,8 @@
-pub use bytes::Bytes;
+use crate::connection::Connection;
+use std::sync::{Arc, Weak};
+
+mod recv_bytes;
+pub use recv_bytes::*;
 
 pub mod error;
 
@@ -7,22 +11,21 @@ pub use kind::*;
 
 pub mod processor;
 
+mod recv;
+pub use recv::*;
+mod send;
+pub use send::*;
+
 mod typed;
 pub use typed::*;
 
-pub type Sender = crossbeam_channel::Sender<Stream>;
-pub type Receiver = crossbeam_channel::Receiver<Stream>;
+pub use crate::utility::JoinHandleList as TaskOwner;
+pub use anyhow::Result;
 
-pub struct Stream {
-	pub address: std::net::SocketAddr,
-	pub typed: Typed,
+pub trait Initiator<TStream> {
+	fn open(connection: &Arc<Connection>) -> Result<()>;
 }
 
-impl Stream {
-	pub async fn read<'a, T>(&mut self) -> anyhow::Result<T>
-	where
-		T: serde::de::DeserializeOwned + Sized,
-	{
-		self.typed.read().await
-	}
+pub trait Responder<TStream> {
+	fn receive(connection: Weak<Connection>, stream: TStream) -> Result<()>;
 }

@@ -1,10 +1,15 @@
-use crate::{stream::Stream, utility::JoinHandleList};
+use crate::{connection::Connection, stream::Typed};
 use std::sync::Arc;
+
+mod registerable;
+pub use registerable::*;
+mod registration;
+pub(crate) use registration::Registration;
+mod registry;
+pub use registry::*;
 
 pub type ArcProcessor = Arc<dyn Processor + Send + Sync + 'static>;
 
 pub trait Processor {
-	fn process(self: Arc<Self>, stream: Stream, handle_owner: Arc<JoinHandleList>);
+	fn create_receiver(self: Arc<Self>, connection: Arc<Connection>, stream: Typed);
 }
-
-pub mod handler;
