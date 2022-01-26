@@ -16,20 +16,28 @@ impl Send {
 		self.write(&T::unique_id().to_owned()).await
 	}
 
+	async fn write_size(&mut self, len: usize) -> anyhow::Result<()> {
+		let len = len as u32;
+		let len_encoded = bincode::serialize(&len)?;
+		self.0.write_all(&len_encoded).await?;
+		Ok(())
+	}
+
 	pub async fn write<T>(&mut self, data: &T) -> anyhow::Result<()>
 	where
 		T: serde::Serialize,
 	{
 		// The data to be sent, in serialized to bytes
 		let data_encoded = bincode::serialize(&data)?;
-		// The number of bytes it took to serialize the data
-		let byte_count = data_encoded.len() as u32;
-		// The number of bytes to send, serialized to bytes
-		let len_encoded = bincode::serialize(&byte_count)?;
-		// Write the number of bytes to the buffer
-		self.0.write_all(&len_encoded).await?;
+		self.write_size(data_encoded.len()).await?;
 		// Write the data to the buffer
 		self.0.write_all(&data_encoded).await?;
+		Ok(())
+	}
+
+	pub async fn write_bytes(&mut self, data: &[u8]) -> anyhow::Result<()> {
+		self.write_size(data.len()).await?;
+		self.0.write_all(data).await?;
 		Ok(())
 	}
 

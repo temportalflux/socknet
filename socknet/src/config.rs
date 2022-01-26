@@ -8,7 +8,6 @@ pub struct Config {
 	pub endpoint: endpoint::Config,
 	pub address: SocketAddr,
 	pub stream_processor: stream::processor::ArcProcessor,
-	pub error_sender: stream::error::Sender,
 }
 
 impl Config {
@@ -22,9 +21,8 @@ impl Config {
 					config.certificate,
 					config.private_key,
 					self.stream_processor,
-					self.error_sender,
 				));
-				endpoint.listen_for_connections(incoming);
+				endpoint.clone().spawn_connection_listener(incoming);
 				Ok(endpoint)
 			}
 			endpoint::Config::Client(config) => {
@@ -35,7 +33,6 @@ impl Config {
 					config.certificate,
 					config.private_key,
 					self.stream_processor,
-					self.error_sender,
 				)))
 			}
 		}

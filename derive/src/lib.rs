@@ -44,12 +44,13 @@ pub fn initiator(args: TokenStream, input: TokenStream) -> TokenStream {
 		#item_struct
 
 		impl stream::Initiator<#stream_type> for #name {
-			fn open(connection: &std::sync::Arc<Connection>) -> stream::Result<()> {
-				let async_conn = std::sync::Arc::downgrade(&connection);
-				connection.spawn(async move {
-					let connection = Connection::upgrade(&async_conn)?;
+			fn open(connection: &std::sync::Weak<Connection>) -> stream::Result<()> {
+				use stream::LogSource;
+				let connection = Connection::upgrade(&connection)?;
+				let log_target = #name::target(stream::Handler::Initiator, &connection);
+				stream::spawn(log_target.clone(), async move {
 					let stream = connection.#connection_open().await?;
-					let stream_impl = Self::new(async_conn, stream);
+					let stream_impl = Self::new(log_target, connection, stream);
 					stream_impl.#callback().await?;
 					Ok(())
 				});
@@ -61,8 +62,8 @@ pub fn initiator(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 #[derive(Debug)]
-struct ResponderParams(syn::LitStr, InitiatorParams);
-impl Parse for ResponderParams {
+struct RegisterParams(syn::LitStr, InitiatorParams);
+impl Parse for RegisterParams {
 	fn parse(input: ParseStream) -> Result<Self> {
 		let stream_kind = input.parse()?;
 		input.parse::<syn::Token![,]>()?;
@@ -72,27 +73,24 @@ impl Parse for ResponderParams {
 }
 
 #[proc_macro_attribute]
-pub fn responder(args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn register_stream(args: TokenStream, input: TokenStream) -> TokenStream {
 	// tells rust that this macro must annotate a `struct`
 	let item_struct = parse_macro_input!(input as ItemStruct);
 	let name = &item_struct.ident;
-	let params = parse_macro_input!(args as ResponderParams);
+	let params = parse_macro_input!(args as RegisterParams);
 
 	let registerable_id = params.0;
 	let callback = params.1 .1;
-	let (stream_type, receiver_case) = match params.1 .0.ident.to_string().as_str() {
-		"Unidirectional" => (
-			quote! { stream::Recv },
-			quote! { stream::Typed::Unidirectional(recv) => #name::receive(connection, recv) },
-		),
-		"Bidirectional" => (
-			quote! { (stream::Send, stream::Recv) },
-			quote! { stream::Typed::Bidirectional(send, recv) => #name::receive(connection, (send, recv)) },
-		),
-		"Datagram" => (
-			quote! { stream::Bytes },
-			quote! { stream::Typed::Datagram(bytes) => #name::receive(connection, bytes) },
-		),
+	let receiver_case = match params.1 .0.ident.to_string().as_str() {
+		"Unidirectional" => {
+			quote! { stream::Typed::Unidirectional(recv) => #name::#callback(connection, recv) }
+		}
+		"Bidirectional" => {
+			quote! { stream::Typed::Bidirectional(send, recv) => #name::#callback(connection, (send, recv)) }
+		}
+		"Datagram" => {
+			quote! { stream::Typed::Datagram(bytes) => #name::#callback(connection, bytes) }
+		}
 		_ => unimplemented!(),
 	};
 
@@ -104,7 +102,7 @@ pub fn responder(args: TokenStream, input: TokenStream) -> TokenStream {
 				#registerable_id
 			}
 
-			fn create_receiver(connection: std::sync::Weak<Connection>, stream: stream::Typed) -> stream::Result<()> {
+			fn create_receiver(connection: std::sync::Arc<Connection>, stream: stream::Typed) -> stream::Result<()> {
 				use stream::Responder;
 				match stream {
 					#receiver_case,
@@ -112,12 +110,34 @@ pub fn responder(args: TokenStream, input: TokenStream) -> TokenStream {
 				}
 			}
 		}
+	};
+	gen.into()
+}
+
+#[proc_macro_attribute]
+pub fn responder(args: TokenStream, input: TokenStream) -> TokenStream {
+	// tells rust that this macro must annotate a `struct`
+	let item_struct = parse_macro_input!(input as ItemStruct);
+	let name = &item_struct.ident;
+	let params = parse_macro_input!(args as InitiatorParams);
+
+	let callback = params.1;
+	let stream_type = match params.0.ident.to_string().as_str() {
+		"Unidirectional" => quote! { stream::Recv },
+		"Bidirectional" => quote! { (stream::Send, stream::Recv) },
+		"Datagram" => quote! { stream::Bytes },
+		_ => unimplemented!(),
+	};
+
+	let gen = quote! {
+		#item_struct
 
 		impl stream::Responder<#stream_type> for #name {
-			fn receive(connection: std::sync::Weak<Connection>, stream: #stream_type) -> stream::Result<()> {
-				let arc_conn = Connection::upgrade(&connection)?;
-				arc_conn.clone().spawn(async move {
-					let stream_impl = Self::new(connection, stream);
+			fn receive(connection: std::sync::Arc<Connection>, stream: #stream_type) -> stream::Result<()> {
+				use stream::LogSource;
+				let log_target = #name::target(stream::Handler::Responder, &connection);
+				stream::spawn(log_target.clone(), async move {
+					let stream_impl = Self::new(log_target, connection, stream);
 					stream_impl.#callback().await?;
 					Ok(())
 				});

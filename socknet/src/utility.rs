@@ -1,4 +1,3 @@
-use crate::LOG;
 use std::sync::{Arc, Mutex};
 
 pub use tokio::task::JoinHandle;
@@ -23,11 +22,11 @@ impl JoinHandleList {
 		Self(Arc::new(Mutex::new(Vec::with_capacity(count))))
 	}
 
-	pub fn spawn<T>(&self, future: T)
+	pub fn spawn<T>(&self, target: String, future: T)
 	where
 		T: futures::future::Future<Output = anyhow::Result<()>> + Send + 'static,
 	{
-		self.push(crate::utility::spawn(future));
+		self.push(crate::utility::spawn(target, future));
 	}
 
 	pub fn push(&self, handle: JoinHandle<()>) {
@@ -39,24 +38,28 @@ pub mod bytes {
 	pub use rmp_serde::{from_read_ref, to_vec};
 }
 
-pub fn spawn<T>(future: T) -> JoinHandle<()>
+pub fn spawn<T>(target: String, future: T) -> JoinHandle<()>
 where
 	T: futures::future::Future<Output = anyhow::Result<()>> + Send + 'static,
 {
 	tokio::task::spawn(async move {
 		if let Err(err) = future.await {
-			log::error!(target: LOG, "{}", err);
+			log::error!(target: &target, "Error: {:?}", err);
 		}
 	})
 }
 
 pub fn fingerprint(certificate: &rustls::Certificate) -> String {
-	use base64ct::{Base64UrlUnpadded, Encoding};
 	use sha2::{Digest, Sha256};
 
 	let mut hasher = Sha256::new();
 	hasher.update(&certificate.0[..]);
 	let hash = hasher.finalize();
 
-	Base64UrlUnpadded::encode_string(&hash)
+	encode_string(&hash)
+}
+
+pub fn encode_string(bytes: &[u8]) -> String {
+	use base64ct::{Base64UrlUnpadded, Encoding};
+	Base64UrlUnpadded::encode_string(&bytes)
 }

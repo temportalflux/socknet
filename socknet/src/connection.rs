@@ -8,8 +8,25 @@ use std::{
 	sync::{Arc, Weak},
 };
 
-pub type Sender = async_channel::Sender<Arc<Connection>>;
-pub type Receiver = async_channel::Receiver<Arc<Connection>>;
+pub type Sender = async_channel::Sender<Event>;
+pub type Receiver = async_channel::Receiver<Event>;
+
+pub enum Event {
+	Created(Weak<Connection>),
+	Dropped(SocketAddr),
+}
+impl std::fmt::Debug for Event {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		match &self {
+			Self::Created(connection) => write!(
+				f,
+				"Create({})",
+				connection.upgrade().unwrap().remote_address()
+			),
+			Self::Dropped(address) => write!(f, "Dropped({})", address),
+		}
+	}
+}
 
 pub struct Connection {
 	endpoint: Weak<Endpoint>,
@@ -55,11 +72,16 @@ impl Connection {
 		Ok(weak.upgrade().ok_or(ConnectionDropped)?)
 	}
 
-	pub fn spawn<T>(&self, future: T)
+	pub fn spawn<T>(self: &Arc<Self>, future: T)
 	where
 		T: futures::future::Future<Output = anyhow::Result<()>> + Send + 'static,
 	{
-		self.handles.spawn(future);
+		let log_target = self.log_target();
+		self.handles.push(tokio::task::spawn(async move {
+			if let Err(err) = future.await {
+				log::error!(target: &log_target, "{:?}", err);
+			}
+		}));
 	}
 
 	pub async fn open_uni(self: &Arc<Self>) -> anyhow::Result<stream::Send> {
@@ -76,21 +98,31 @@ impl Connection {
 		self.connection.send_datagram(data)?;
 		Ok(())
 	}
+
+	pub fn close(&self, code: u32, reason: &[u8]) {
+		self.connection.close(code.into(), reason);
+	}
 }
 
 impl Drop for Connection {
 	fn drop(&mut self) {
 		log::info!(
-			target: crate::LOG,
+			target: &self.log_target(),
 			"Closing connection to {}",
 			self.remote_address()
 		);
+		self.endpoint()
+			.unwrap()
+			.send_connection_event(Event::Dropped(self.remote_address()));
 	}
 }
 
 impl Connection {
-	pub(crate) fn create(endpoint: Arc<Endpoint>, new_conn: quinn::NewConnection) -> Arc<Self> {
-		use async_channel::TrySendError;
+	pub fn log_target(&self) -> String {
+		format!("{}/connection[{}]", crate::LOG, self.remote_address())
+	}
+
+	pub(crate) fn create(endpoint: &Arc<Endpoint>, new_conn: quinn::NewConnection) -> Weak<Self> {
 		let handles = Arc::new(JoinHandleList::with_capacity(3));
 
 		let connection = Arc::new(Self {
@@ -109,24 +141,8 @@ impl Connection {
 			.clone()
 			.spawn_stream_handler(stream::Kind::Datagram, new_conn.datagrams);
 
-		match endpoint.connection_sender.try_send(connection.clone()) {
-			Ok(_) => {}
-			Err(TrySendError::Full(connection)) => {
-				log::error!(
-					target: crate::LOG,
-					"Failed to enqueue new connection from {}, the connection queue is full.",
-					connection.remote_address()
-				);
-			}
-			Err(TrySendError::Closed(connection)) => {
-				log::error!(
-					target: crate::LOG,
-					"Failed to enqueue new connection from {}, the connection queue is no longer accepting connections.",
-					connection.remote_address()
-				);
-			}
-		}
-
+		let connection = Arc::downgrade(&connection);
+		endpoint.send_connection_event(Event::Created(connection.clone()));
 		connection
 	}
 
@@ -139,38 +155,25 @@ impl Connection {
 			+ std::marker::Unpin,
 		TStream: 'static + Into<stream::Typed> + Send + Sync,
 	{
-		let weak_conn = Arc::downgrade(&self);
-		self.clone().spawn(async move {
+		let log_target = format!("{}[{} streams]", self.log_target(), kind);
+		crate::utility::spawn(log_target.clone(), async move {
 			use futures_util::StreamExt;
 			while let Some(status) = incoming.next().await {
-				let connection = weak_conn.upgrade().ok_or(ConnectionDropped)?;
-				let endpoint = connection.endpoint()?;
 				match status {
 					Ok(item) => {
+						let endpoint = self.endpoint()?;
 						endpoint
 							.stream_processor
 							.clone()
-							.create_receiver(connection.clone(), item.into());
+							.create_receiver(self.clone(), item.into());
 					}
 					Err(error) => {
-						if let Err(send_err) = endpoint
-							.error_sender
-							.send(stream::error::Error {
-								address: connection.remote_address(),
-								kind,
-								error,
-							})
-							.await
-						{
-							log::error!(
-								target: crate::LOG,
-								"Failed to send stream error, {}.",
-								send_err
-							);
-						}
+						log::error!(target: &log_target, "Connection Error: {:?}", error);
+						break;
 					}
 				}
 			}
+			log::info!(target: &log_target, "Finished receiving {} streams", kind);
 			Ok(())
 		});
 	}

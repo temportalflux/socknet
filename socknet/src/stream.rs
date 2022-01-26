@@ -4,8 +4,6 @@ use std::sync::{Arc, Weak};
 mod recv_bytes;
 pub use recv_bytes::*;
 
-pub mod error;
-
 mod kind;
 pub use kind::*;
 
@@ -19,13 +17,22 @@ pub use send::*;
 mod typed;
 pub use typed::*;
 
-pub use crate::utility::JoinHandleList as TaskOwner;
+pub use crate::utility::{spawn, JoinHandleList as TaskOwner};
 pub use anyhow::Result;
 
-pub trait Initiator<TStream> {
-	fn open(connection: &Arc<Connection>) -> Result<()>;
+pub enum Handler {
+	Initiator,
+	Responder,
 }
 
-pub trait Responder<TStream> {
-	fn receive(connection: Weak<Connection>, stream: TStream) -> Result<()>;
+pub trait LogSource {
+	fn target(kind: Handler, connection: &Arc<Connection>) -> String;
+}
+
+pub trait Initiator<TStream>: LogSource {
+	fn open(connection: &Weak<Connection>) -> Result<()>;
+}
+
+pub trait Responder<TStream>: LogSource {
+	fn receive(connection: Arc<Connection>, stream: TStream) -> Result<()>;
 }

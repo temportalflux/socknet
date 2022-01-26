@@ -2,10 +2,10 @@ use crate::{
 	connection::Connection,
 	stream::{self, processor::Registerable},
 };
-use std::sync::Weak;
+use std::sync::Arc;
 
 type FnCreateReceiver =
-	Box<dyn Fn(Weak<Connection>, stream::Typed) -> anyhow::Result<()> + Send + Sync + 'static>;
+	Box<dyn Fn(Arc<Connection>, stream::Typed) -> anyhow::Result<()> + Send + Sync + 'static>;
 pub(crate) struct Registration {
 	fn_create_receiver: FnCreateReceiver,
 }
@@ -24,7 +24,7 @@ impl Registration {
 
 	pub fn create_receiver(
 		&self,
-		connection: Weak<Connection>,
+		connection: Arc<Connection>,
 		stream: stream::Typed,
 	) -> anyhow::Result<()> {
 		(self.fn_create_receiver)(connection, stream)

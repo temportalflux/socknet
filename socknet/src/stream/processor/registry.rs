@@ -5,6 +5,7 @@ use crate::{
 		Typed,
 	},
 };
+use anyhow::Context;
 use std::{collections::HashMap, sync::Arc};
 
 pub struct Registry {
@@ -31,11 +32,14 @@ impl Registry {
 
 impl Processor for Registry {
 	fn create_receiver(self: Arc<Self>, connection: Arc<Connection>, mut stream: Typed) {
-		connection.clone().spawn(async move {
-			let handler_id = stream.read_handler_id().await?;
+		crate::utility::spawn(connection.log_target(), async move {
+			let handler_id = stream
+				.read_handler_id()
+				.await
+				.context("reading handler id")?;
 			match self.handlers.get(handler_id.as_str()) {
 				Some(registration) => {
-					registration.create_receiver(Arc::downgrade(&connection), stream)?;
+					registration.create_receiver(connection, stream)?;
 				}
 				None => {
 					log::error!(

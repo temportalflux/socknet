@@ -1,7 +1,7 @@
 use crate::{
 	connection::{self, Connection},
-	stream::{self, processor::ArcProcessor},
-	utility::{self, JoinHandleList},
+	stream::processor::ArcProcessor,
+	utility::JoinHandleList,
 };
 use std::{
 	net::SocketAddr,
@@ -33,16 +33,11 @@ pub struct Endpoint {
 	pub(crate) connection_sender: connection::Sender,
 	connection_receiver: connection::Receiver,
 	pub(crate) stream_processor: ArcProcessor,
-	pub(crate) error_sender: stream::error::Sender,
 }
 
 impl Drop for Endpoint {
 	fn drop(&mut self) {
-		log::info!(
-			target: crate::LOG,
-			"Closing endpoint {}",
-			self.endpoint.local_addr().unwrap()
-		);
+		log::info!(target: crate::LOG, "Closing endpoint {}", self.address());
 	}
 }
 
@@ -56,7 +51,6 @@ impl Endpoint {
 		certificate: rustls::Certificate,
 		private_key: rustls::PrivateKey,
 		stream_processor: ArcProcessor,
-		error_sender: stream::error::Sender,
 	) -> Self {
 		let endpoint = Arc::new(endpoint);
 		let (connection_sender, connection_receiver) = async_channel::unbounded();
@@ -68,15 +62,27 @@ impl Endpoint {
 			connection_sender,
 			connection_receiver,
 			stream_processor,
-			error_sender,
 		}
 	}
 
-	pub fn spawn_owned<T>(&self, future: T)
+	fn address(&self) -> SocketAddr {
+		self.endpoint.local_addr().unwrap()
+	}
+
+	fn log_target(&self) -> String {
+		format!("{}/endpoint[{}]", crate::LOG, self.address())
+	}
+
+	pub fn spawn<T>(&self, future: T)
 	where
 		T: futures::future::Future<Output = anyhow::Result<()>> + Send + 'static,
 	{
-		self.handles.push(utility::spawn(future));
+		let log_target = self.log_target();
+		self.handles.push(tokio::task::spawn(async move {
+			if let Err(err) = future.await {
+				log::error!(target: &log_target, "{:?}", err);
+			}
+		}));
 	}
 
 	pub fn connection_receiver(&self) -> &connection::Receiver {
@@ -97,29 +103,58 @@ impl Endpoint {
 }
 
 impl Endpoint {
-	pub(crate) fn listen_for_connections(self: &Arc<Self>, mut incoming: quinn::Incoming) {
-		let weak_endpoint = Arc::downgrade(&self);
-		self.spawn_owned(async move {
-			use futures_util::StreamExt;
-			while let Some(conn) = incoming.next().await {
-				let connection: quinn::NewConnection = conn.await?;
-				let arc_endpoint = weak_endpoint.upgrade().ok_or(EndpointDropped)?;
-				Connection::create(arc_endpoint, connection);
+	pub(crate) fn spawn_connection_listener(self: Arc<Self>, incoming: quinn::Incoming) {
+		let log_target = self.log_target();
+		tokio::task::spawn(async move {
+			if let Err(err) = Endpoint::listen_for_connections(&self, incoming).await {
+				log::error!(target: &log_target, "{:?}", err);
 			}
-			Ok(())
 		});
+	}
+
+	async fn listen_for_connections(
+		self: &Arc<Self>,
+		mut incoming: quinn::Incoming,
+	) -> anyhow::Result<()> {
+		use futures_util::StreamExt;
+		while let Some(conn) = incoming.next().await {
+			let connection: quinn::NewConnection = conn.await?;
+			Connection::create(&self, connection);
+		}
+		Ok(())
 	}
 
 	pub async fn connect(
 		self: &Arc<Self>,
 		address: SocketAddr,
 		name: String,
-	) -> anyhow::Result<Arc<Connection>> {
+	) -> anyhow::Result<Weak<Connection>> {
 		log::info!(target: crate::LOG, "Connecting to {} ({})", name, address);
 		let async_endpoint = self.endpoint.clone();
 		let connection = async_endpoint.connect(address, &name)?.await?;
-		let connection = Connection::create(self.clone(), connection);
-		Ok(connection)
+		Ok(Connection::create(&self, connection))
+	}
+
+	pub(crate) fn send_connection_event(&self, event: connection::Event) {
+		use async_channel::TrySendError;
+		let log_target = self.log_target();
+		match self.connection_sender.try_send(event) {
+			Ok(_) => {}
+			Err(TrySendError::Full(event)) => {
+				log::error!(
+					target: &log_target,
+					"Failed to enqueue connection event {:?}, the connection queue is full.",
+					event
+				);
+			}
+			Err(TrySendError::Closed(event)) => {
+				log::error!(
+					target: &log_target,
+					"Failed to enqueue connection event {:?}, the connection queue has been closed.",
+					event
+				);
+			}
+		}
 	}
 }
 
