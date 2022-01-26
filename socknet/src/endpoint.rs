@@ -1,6 +1,6 @@
 use crate::{
 	connection::{self, Connection},
-	stream::processor::ArcProcessor,
+	stream::Registry,
 	utility::JoinHandleList,
 };
 use std::{
@@ -32,7 +32,7 @@ pub struct Endpoint {
 	handles: JoinHandleList,
 	pub(crate) connection_sender: connection::Sender,
 	connection_receiver: connection::Receiver,
-	pub(crate) stream_processor: ArcProcessor,
+	pub(crate) stream_registry: Arc<Registry>,
 }
 
 impl Drop for Endpoint {
@@ -50,7 +50,7 @@ impl Endpoint {
 		endpoint: quinn::Endpoint,
 		certificate: rustls::Certificate,
 		private_key: rustls::PrivateKey,
-		stream_processor: ArcProcessor,
+		stream_registry: Arc<Registry>,
 	) -> Self {
 		let endpoint = Arc::new(endpoint);
 		let (connection_sender, connection_receiver) = async_channel::unbounded();
@@ -61,7 +61,7 @@ impl Endpoint {
 			handles: JoinHandleList::new(),
 			connection_sender,
 			connection_receiver,
-			stream_processor,
+			stream_registry,
 		}
 	}
 

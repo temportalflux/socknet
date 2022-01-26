@@ -122,6 +122,21 @@ impl Connection {
 		format!("{}/connection[{}]", crate::LOG, self.remote_address())
 	}
 
+	pub fn registry(&self) -> anyhow::Result<Arc<stream::Registry>> {
+		Ok(self.endpoint()?.stream_registry.clone())
+	}
+
+	pub fn open<T>(connection: &Weak<Connection>) -> anyhow::Result<()>
+	where
+		T: stream::Buildable,
+		T::Builder: stream::Builder + Send + Sync + 'static,
+	{
+		use stream::Builder;
+		let registry = Self::upgrade(&connection)?.registry()?;
+		let builder = registry.builder::<T>().unwrap();
+		Ok(builder.open(connection.clone())?)
+	}
+
 	pub(crate) fn create(endpoint: &Arc<Endpoint>, new_conn: quinn::NewConnection) -> Weak<Self> {
 		let handles = Arc::new(JoinHandleList::with_capacity(3));
 
@@ -161,11 +176,8 @@ impl Connection {
 			while let Some(status) = incoming.next().await {
 				match status {
 					Ok(item) => {
-						let endpoint = self.endpoint()?;
-						endpoint
-							.stream_processor
-							.clone()
-							.create_receiver(self.clone(), item.into());
+						let registry = self.endpoint()?.stream_registry.clone();
+						registry.create_receiver(self.clone(), item.into());
 					}
 					Err(error) => {
 						log::error!(target: &log_target, "Connection Error: {:?}", error);

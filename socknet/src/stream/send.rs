@@ -1,4 +1,4 @@
-use crate::stream::processor::Registerable;
+use crate::stream::Builder;
 
 pub struct Send(pub(crate) quinn::SendStream);
 
@@ -11,7 +11,7 @@ impl From<quinn::SendStream> for Send {
 impl Send {
 	pub async fn write_id<T>(&mut self) -> anyhow::Result<()>
 	where
-		T: Registerable + std::marker::Send + Sync + 'static,
+		T: Builder + std::marker::Send + Sync + 'static,
 	{
 		self.write(&T::unique_id().to_owned()).await
 	}

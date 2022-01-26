@@ -7,7 +7,7 @@ use std::{net::SocketAddr, sync::Arc};
 pub struct Config {
 	pub endpoint: endpoint::Config,
 	pub address: SocketAddr,
-	pub stream_processor: stream::processor::ArcProcessor,
+	pub stream_registry: Arc<stream::Registry>,
 }
 
 impl Config {
@@ -20,7 +20,7 @@ impl Config {
 					endpoint,
 					config.certificate,
 					config.private_key,
-					self.stream_processor,
+					self.stream_registry,
 				));
 				endpoint.clone().spawn_connection_listener(incoming);
 				Ok(endpoint)
@@ -32,7 +32,7 @@ impl Config {
 					endpoint,
 					config.certificate,
 					config.private_key,
-					self.stream_processor,
+					self.stream_registry,
 				)))
 			}
 		}
