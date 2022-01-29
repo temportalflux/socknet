@@ -1,52 +1,19 @@
-use crate::stream::Builder;
+use crate::stream;
 
-pub struct Send(pub(crate) quinn::SendStream);
+/// Contextual information about an outgoing stream.
+/// Provided to newly created [`Initiator`](stream::handler::Initiator) structs to
+/// carry application context, connection, and stream objects.
+#[allow(type_alias_bounds)]
+pub type Context<T: Builder> = stream::Context<T, <T::Opener as stream::Opener>::Output>;
 
-impl From<quinn::SendStream> for Send {
-	fn from(stream: quinn::SendStream) -> Self {
-		Self(stream)
-	}
-}
-
-impl Send {
-	pub async fn write_id<T>(&mut self) -> anyhow::Result<()>
-	where
-		T: Builder + std::marker::Send + Sync + 'static,
-	{
-		self.write(&T::unique_id().to_owned()).await
-	}
-
-	async fn write_size(&mut self, len: usize) -> anyhow::Result<()> {
-		let len = len as u32;
-		let len_encoded = bincode::serialize(&len)?;
-		self.0.write_all(&len_encoded).await?;
-		Ok(())
-	}
-
-	pub async fn write<T>(&mut self, data: &T) -> anyhow::Result<()>
-	where
-		T: serde::Serialize,
-	{
-		// The data to be sent, in serialized to bytes
-		let data_encoded = bincode::serialize(&data)?;
-		self.write_size(data_encoded.len()).await?;
-		// Write the data to the buffer
-		self.0.write_all(&data_encoded).await?;
-		Ok(())
-	}
-
-	pub async fn write_bytes(&mut self, data: &[u8]) -> anyhow::Result<()> {
-		self.write_size(data.len()).await?;
-		self.0.write_all(data).await?;
-		Ok(())
-	}
-
-	pub async fn finish(&mut self) -> anyhow::Result<()> {
-		Ok(self.0.finish().await?)
-	}
-
-	pub async fn stopped(&mut self) -> anyhow::Result<u32> {
-		let code = self.0.stopped().await?;
-		Ok(code.into_inner() as u32)
-	}
+/// A builder for creating handlers which implement the [`Initiator`](stream::handler::Initiator) trait.
+/// Implementors must create at least 1 builder per initiator type
+/// (which may be shared with the [`Receiver`](stream::handler::Receiver) type).
+pub trait Builder: stream::Identifier {
+	/// The kind of stream that this builder should create.
+	///
+	/// The type must implement the [`StreamInitiator`](stream::handler::Initiator) trait.
+	/// This allows the type of the stream to be known at compile time while also
+	/// specializing the function called on the connection which creates the stream.
+	type Opener: stream::Opener;
 }

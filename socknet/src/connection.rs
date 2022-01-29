@@ -45,16 +45,18 @@ impl Connection {
 	}
 
 	pub fn certificates(&self) -> anyhow::Result<Vec<rustls::Certificate>> {
-		let identity = self.peer_identity().ok_or(NoIdentity)?;
+		let identity = self.peer_identity().ok_or(Error::NoIdentity)?;
 		let certificates = identity
 			.downcast::<Vec<rustls::Certificate>>()
-			.map_err(|_| IdentityIsNotCertificate)?;
+			.map_err(|_| Error::IdentityIsNotCertificate)?;
 		Ok(*certificates)
 	}
 
 	pub fn certificate(&self) -> anyhow::Result<rustls::Certificate> {
 		let mut certificates = self.certificates()?;
-		Ok(certificates.pop().ok_or(CertificateIdentityIsEmpty)?)
+		Ok(certificates
+			.pop()
+			.ok_or(Error::CertificateIdentityIsEmpty)?)
 	}
 
 	pub fn fingerprint(&self) -> anyhow::Result<String> {
@@ -69,7 +71,7 @@ impl Connection {
 
 impl Connection {
 	pub fn upgrade(weak: &Weak<Self>) -> anyhow::Result<Arc<Self>> {
-		Ok(weak.upgrade().ok_or(ConnectionDropped)?)
+		Ok(weak.upgrade().ok_or(Error::ConnectionDropped)?)
 	}
 
 	pub fn spawn<T>(self: &Arc<Self>, future: T)
@@ -84,14 +86,16 @@ impl Connection {
 		}));
 	}
 
-	pub async fn open_uni(self: &Arc<Self>) -> anyhow::Result<stream::Send> {
+	pub async fn open_uni(self: &Arc<Self>) -> anyhow::Result<stream::kind::Send> {
 		let send = self.connection.open_uni().await?;
-		Ok(stream::Send(send))
+		Ok(send.into())
 	}
 
-	pub async fn open_bi(self: &Arc<Self>) -> anyhow::Result<(stream::Send, stream::Recv)> {
+	pub async fn open_bi(
+		self: &Arc<Self>,
+	) -> anyhow::Result<(stream::kind::Send, stream::kind::Recv)> {
 		let (send, recv) = self.connection.open_bi().await?;
-		Ok((stream::Send(send), stream::Recv(recv)))
+		Ok((send.into(), recv.into()))
 	}
 
 	pub fn send_datagram(&self, data: bytes::Bytes) -> anyhow::Result<()> {
@@ -126,17 +130,6 @@ impl Connection {
 		Ok(self.endpoint()?.stream_registry.clone())
 	}
 
-	pub fn open<T>(connection: &Weak<Connection>) -> anyhow::Result<()>
-	where
-		T: stream::Buildable,
-		T::Builder: stream::Builder + Send + Sync + 'static,
-	{
-		use stream::Builder;
-		let registry = Self::upgrade(&connection)?.registry()?;
-		let builder = registry.builder::<T>().unwrap();
-		Ok(builder.open(connection.clone())?)
-	}
-
 	pub(crate) fn create(endpoint: &Arc<Endpoint>, new_conn: quinn::NewConnection) -> Weak<Self> {
 		let handles = Arc::new(JoinHandleList::with_capacity(3));
 
@@ -148,27 +141,27 @@ impl Connection {
 
 		connection
 			.clone()
-			.spawn_stream_handler(stream::Kind::Unidirectional, new_conn.uni_streams);
+			.spawn_stream_handler("Unidirectional", new_conn.uni_streams);
 		connection
 			.clone()
-			.spawn_stream_handler(stream::Kind::Bidirectional, new_conn.bi_streams);
+			.spawn_stream_handler("Bidirectional", new_conn.bi_streams);
 		connection
 			.clone()
-			.spawn_stream_handler(stream::Kind::Datagram, new_conn.datagrams);
+			.spawn_stream_handler("Datagram", new_conn.datagrams);
 
 		let connection = Arc::downgrade(&connection);
 		endpoint.send_connection_event(Event::Created(connection.clone()));
 		connection
 	}
 
-	fn spawn_stream_handler<T, TStream>(self: Arc<Self>, kind: stream::Kind, mut incoming: T)
+	fn spawn_stream_handler<T, TStream>(self: Arc<Self>, kind: &'static str, mut incoming: T)
 	where
 		T: 'static
 			+ futures_util::stream::Stream<Item = Result<TStream, quinn::ConnectionError>>
 			+ Send
 			+ Sync
 			+ std::marker::Unpin,
-		TStream: 'static + Into<stream::Typed> + Send + Sync,
+		TStream: 'static + Into<stream::kind::Kind> + Send + Sync,
 	{
 		let log_target = format!("{}[{} streams]", self.log_target(), kind);
 		crate::utility::spawn(log_target.clone(), async move {
@@ -191,54 +184,14 @@ impl Connection {
 	}
 }
 
-pub struct ConnectionDropped;
-impl std::error::Error for ConnectionDropped {}
-impl std::fmt::Debug for ConnectionDropped {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		<Self as std::fmt::Display>::fmt(&self, f)
-	}
-}
-impl std::fmt::Display for ConnectionDropped {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "Cannot get Connection, it has been dropped already.",)
-	}
-}
-
-pub struct NoIdentity;
-impl std::error::Error for NoIdentity {}
-impl std::fmt::Debug for NoIdentity {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		<Self as std::fmt::Display>::fmt(&self, f)
-	}
-}
-impl std::fmt::Display for NoIdentity {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "Connection has no identity.",)
-	}
-}
-
-pub struct IdentityIsNotCertificate;
-impl std::error::Error for IdentityIsNotCertificate {}
-impl std::fmt::Debug for IdentityIsNotCertificate {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		<Self as std::fmt::Display>::fmt(&self, f)
-	}
-}
-impl std::fmt::Display for IdentityIsNotCertificate {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "Connection's identity is not a list of certificates.",)
-	}
-}
-
-pub struct CertificateIdentityIsEmpty;
-impl std::error::Error for CertificateIdentityIsEmpty {}
-impl std::fmt::Debug for CertificateIdentityIsEmpty {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		<Self as std::fmt::Display>::fmt(&self, f)
-	}
-}
-impl std::fmt::Display for CertificateIdentityIsEmpty {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "Connection's identity certificate list is empty.",)
-	}
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+	#[error("Cannot get Connection, it has been dropped already.")]
+	ConnectionDropped,
+	#[error("Connection has no identity.")]
+	NoIdentity,
+	#[error("Connection's identity is not a list of certificates.")]
+	IdentityIsNotCertificate,
+	#[error("Connection's identity certificate list is empty.")]
+	CertificateIdentityIsEmpty,
 }

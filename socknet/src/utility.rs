@@ -1,6 +1,14 @@
-use std::sync::{Arc, Mutex};
+use std::{
+	pin::Pin,
+	sync::{Arc, Mutex},
+};
 
 pub use tokio::task::JoinHandle;
+
+/// An annonymous, pinned, future which outputs a result with some generic success type and the [`anyhow error type`](anyhow::Error).
+pub type PinFutureResult<T> = PinFutureResultLifetime<'static, T>;
+pub type PinFutureResultLifetime<'l, T> =
+	Pin<Box<dyn futures_util::future::Future<Output = anyhow::Result<T>> + 'l + Send>>;
 
 pub struct JoinHandleList(Arc<Mutex<Vec<JoinHandle<()>>>>);
 
@@ -62,4 +70,9 @@ pub fn fingerprint(certificate: &rustls::Certificate) -> String {
 pub fn encode_string(bytes: &[u8]) -> String {
 	use base64ct::{Base64UrlUnpadded, Encoding};
 	Base64UrlUnpadded::encode_string(&bytes)
+}
+
+pub fn decode_bytes(encoded: &str) -> anyhow::Result<Vec<u8>> {
+	use base64ct::{Base64UrlUnpadded, Encoding};
+	Ok(Base64UrlUnpadded::decode_vec(&encoded)?)
 }

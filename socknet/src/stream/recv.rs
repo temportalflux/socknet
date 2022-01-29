@@ -1,43 +1,54 @@
-pub struct Recv(pub(crate) quinn::RecvStream);
+use crate::{connection::Connection, stream};
+use std::sync::Arc;
 
-impl From<quinn::RecvStream> for Recv {
-	fn from(stream: quinn::RecvStream) -> Self {
-		Self(stream)
-	}
-}
+/// Contextual information about an incoming stream.
+/// Provided to newly created [`Receiver`](stream::handler::Receiver) structs to
+/// carry application context, connection, and stream objects.
+#[allow(type_alias_bounds)]
+pub type Context<T: Builder> = stream::Context<T, <T::Extractor as stream::Extractor>::Output>;
 
-impl Recv {
-	pub async fn read_exact(&mut self, byte_count: usize) -> anyhow::Result<Vec<u8>> {
-		let mut bytes = vec![0; byte_count];
-		self.0.read_exact(&mut bytes).await?;
-		Ok(bytes)
-	}
+/// A builder for creating handlers which implement the [`Receiver`](stream::handler::Receiver) trait.
+/// Implementors must create at least 1 builder per receiver type
+/// (which may be shared with the [`Initiator`](stream::handler::Initiator) type).
+pub trait Builder: stream::Identifier {
+	/// The kind of stream that this builder should create.
+	///
+	/// The type must implement the [`StreamExtractor`](stream::Extractor) trait.
+	/// This allows the type of the stream to be known at compile time while also
+	/// specializing what type of stream the receiver gets.
+	type Extractor: stream::Extractor;
 
-	async fn read_size(&mut self) -> anyhow::Result<usize> {
-		let len_encoded_size = std::mem::size_of::<u32>();
-		let encoded = self.read_exact(len_encoded_size).await?;
-		let size: u32 = bincode::deserialize(&encoded[..])?;
-		Ok(size as usize)
-	}
+	/// The [`Receiver`](stream::handler::Receiver) type that this builder creates
+	/// when a stream with its [`unique_id`](stream::Identifier::unique_id) is encountered.
+	type Receiver: stream::handler::Receiver;
 
-	pub async fn read<T>(&mut self) -> anyhow::Result<T>
+	/// Extracts the stream using the [`Extractor`](Self::Extractor) associated type,
+	/// then wraps the context, connection, and extracted stream into a [`context`](stream::recv::Context).
+	fn into_context(
+		self: Arc<Self>,
+		connection: Arc<Connection>,
+		stream: stream::kind::Kind,
+	) -> anyhow::Result<Context<Self>>
 	where
-		T: serde::de::DeserializeOwned + Sized,
+		Self: Sized,
 	{
-		let byte_count = self.read_size().await?;
-		// Read the data in bytes
-		let encoded = self.read_exact(byte_count).await?;
-		// Convert data bytes to type
-		let data: T = bincode::deserialize(&encoded[..])?;
-		Ok(data)
+		let stream = <Self::Extractor as stream::Extractor>::extract(stream)?;
+		Ok(Context {
+			builder: self,
+			connection,
+			stream,
+		})
 	}
 
-	pub async fn read_bytes(&mut self) -> anyhow::Result<Vec<u8>> {
-		let byte_count = self.read_size().await?;
-		self.read_exact(byte_count).await
-	}
-
-	pub async fn stop(&mut self, code: u32) -> anyhow::Result<()> {
-		Ok(self.0.stop(quinn::VarInt::from_u32(code))?)
+	/// Takes the context created by [`into_context`](Self::into_context),
+	/// creates the [`Receiver`](Self::Receiver) object from the context,
+	/// and then calls [`receive`](stream::handler::Receiver::receive) to start parsing/handling the incoming stream.
+	fn process(context: Context<Self>)
+	where
+		Self: Sized,
+		Self::Receiver: From<Context<Self>> + stream::handler::Receiver,
+	{
+		use stream::handler::Receiver;
+		Self::Receiver::from(context).receive();
 	}
 }
