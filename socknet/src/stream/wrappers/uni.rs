@@ -1,4 +1,8 @@
-use crate::{connection::Connection, stream, utility::PinFutureResult};
+use crate::{
+	connection::{active::Active, Connection},
+	stream,
+	utility::PinFutureResult,
+};
 use std::sync::Arc;
 
 /// Initates/opens a unidirectional outgoing stream for some connection,

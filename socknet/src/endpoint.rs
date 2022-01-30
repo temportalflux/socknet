@@ -30,14 +30,15 @@ pub struct Endpoint {
 	certificate: rustls::Certificate,
 	private_key: rustls::PrivateKey,
 	handles: JoinHandleList,
-	pub(crate) connection_sender: connection::Sender,
-	connection_receiver: connection::Receiver,
+	pub(crate) connection_sender: connection::event::Sender,
+	connection_receiver: connection::event::Receiver,
 	pub(crate) stream_registry: Arc<Registry>,
 }
 
 impl Drop for Endpoint {
 	fn drop(&mut self) {
 		log::info!(target: crate::LOG, "Closing endpoint {}", self.address());
+		self.endpoint.close(quinn::VarInt::from_u32(0), &vec![]);
 	}
 }
 
@@ -85,7 +86,7 @@ impl Endpoint {
 		}));
 	}
 
-	pub fn connection_receiver(&self) -> &connection::Receiver {
+	pub fn connection_receiver(&self) -> &connection::event::Receiver {
 		&self.connection_receiver
 	}
 
@@ -103,23 +104,29 @@ impl Endpoint {
 }
 
 impl Endpoint {
-	pub(crate) fn spawn_connection_listener(self: Arc<Self>, incoming: quinn::Incoming) {
+	pub(crate) fn spawn_connection_listener(self: &Arc<Self>, incoming: quinn::Incoming) {
 		let log_target = self.log_target();
+		let weak = Arc::downgrade(&self);
 		tokio::task::spawn(async move {
-			if let Err(err) = Endpoint::listen_for_connections(&self, incoming).await {
+			if let Err(err) = Endpoint::listen_for_connections(&weak, incoming).await {
 				log::error!(target: &log_target, "{:?}", err);
 			}
 		});
 	}
 
 	async fn listen_for_connections(
-		self: &Arc<Self>,
+		endpoint: &Weak<Self>,
 		mut incoming: quinn::Incoming,
 	) -> anyhow::Result<()> {
 		use futures_util::StreamExt;
 		while let Some(conn) = incoming.next().await {
+			use connection::opened::Remote;
 			let connection: quinn::NewConnection = conn.await?;
-			Connection::create(&self, Some(connection));
+			let endpoint = match endpoint.upgrade() {
+				Some(arc) => arc,
+				None => return Err(EndpointDropped)?,
+			};
+			Connection::create(&endpoint, Remote::from(connection));
 		}
 		Ok(())
 	}
@@ -130,17 +137,21 @@ impl Endpoint {
 		name: String,
 	) -> anyhow::Result<Weak<Connection>> {
 		log::info!(target: crate::LOG, "Connecting to {} ({})", name, address);
-		let connection = match address == self.address() {
+		Ok(match address == self.address() {
 			false => {
+				use connection::opened::Remote;
 				let async_endpoint = self.endpoint.clone();
-				Some(async_endpoint.connect(address, &name)?.await?)
+				let peer: Remote = async_endpoint.connect(address, &name)?.await?.into();
+				Connection::create(&self, peer)
 			}
-			true => None,
-		};
-		Ok(Connection::create(&self, connection))
+			true => {
+				use connection::opened::Local;
+				Connection::create(&self, Local::new(Arc::downgrade(&self)))
+			}
+		})
 	}
 
-	pub(crate) fn send_connection_event(&self, event: connection::Event) {
+	pub(crate) fn send_connection_event(&self, event: connection::event::Event) {
 		use async_channel::TrySendError;
 		let log_target = self.log_target();
 		match self.connection_sender.try_send(event) {

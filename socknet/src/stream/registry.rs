@@ -106,18 +106,24 @@ impl Registry {
 		connection: Arc<Connection>,
 		mut stream: stream::kind::Kind,
 	) {
-		crate::utility::spawn(connection.log_target(), async move {
+		let log = connection.log_target();
+		crate::utility::spawn(log.clone(), async move {
 			let handler_id = stream
 				.read_handler_id()
 				.await
 				.context("reading handler id")?;
+			log::trace!(
+				target: &log,
+				"Received stream with handler id {}",
+				handler_id
+			);
 			match self.builders.get(handler_id.as_str()) {
 				Some(registered) => {
 					registered.process(connection, stream)?;
 				}
 				None => {
 					log::error!(
-						target: crate::LOG,
+						target: &log,
 						"Failed to find stream handler for id {}",
 						handler_id
 					);

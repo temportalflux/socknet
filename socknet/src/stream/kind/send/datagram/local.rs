@@ -1,5 +1,5 @@
 use crate::{
-	connection::Connection,
+	connection::{active::Active, Connection},
 	stream::{
 		kind::send::{Send, Write},
 		local,

@@ -22,7 +22,7 @@ impl Config {
 					config.private_key,
 					self.stream_registry,
 				));
-				endpoint.clone().spawn_connection_listener(incoming);
+				endpoint.spawn_connection_listener(incoming);
 				Ok(endpoint)
 			}
 			endpoint::Config::Client(config) => {
