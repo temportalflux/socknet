@@ -65,7 +65,7 @@ impl Endpoint {
 		}
 	}
 
-	fn address(&self) -> SocketAddr {
+	pub fn address(&self) -> SocketAddr {
 		self.endpoint.local_addr().unwrap()
 	}
 
@@ -119,7 +119,7 @@ impl Endpoint {
 		use futures_util::StreamExt;
 		while let Some(conn) = incoming.next().await {
 			let connection: quinn::NewConnection = conn.await?;
-			Connection::create(&self, connection);
+			Connection::create(&self, Some(connection));
 		}
 		Ok(())
 	}
@@ -130,8 +130,13 @@ impl Endpoint {
 		name: String,
 	) -> anyhow::Result<Weak<Connection>> {
 		log::info!(target: crate::LOG, "Connecting to {} ({})", name, address);
-		let async_endpoint = self.endpoint.clone();
-		let connection = async_endpoint.connect(address, &name)?.await?;
+		let connection = match address == self.address() {
+			false => {
+				let async_endpoint = self.endpoint.clone();
+				Some(async_endpoint.connect(address, &name)?.await?)
+			}
+			true => None,
+		};
 		Ok(Connection::create(&self, connection))
 	}
 

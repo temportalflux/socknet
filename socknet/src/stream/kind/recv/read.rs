@@ -46,7 +46,7 @@ pub trait Read {
 	fn read<'a, T>(&'a mut self) -> PinFutureResultLifetime<'a, T>
 	where
 		Self: Send,
-		T: serde::de::DeserializeOwned + Sized,
+		T: serde::de::DeserializeOwned + Sized + Send + Sync + 'static,
 	{
 		Box::pin(async move {
 			let encoded = self.read_bytes().await?;

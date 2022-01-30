@@ -9,7 +9,7 @@ use std::sync::Arc;
 /// Calls [`open_uni`](Connection::open_uni) under the hood.
 pub struct Opener;
 impl stream::Opener for Opener {
-	type Output = stream::kind::Send;
+	type Output = stream::kind::send::Ongoing;
 	fn open(connection: Arc<Connection>) -> PinFutureResult<Self::Output> {
 		Box::pin(async move { connection.open_uni().await })
 	}
@@ -19,7 +19,7 @@ impl stream::Opener for Opener {
 /// so it can be used by a [`Receiver`](stream::handler::Receiver).
 pub struct Extractor;
 impl stream::Extractor for Extractor {
-	type Output = stream::kind::Recv;
+	type Output = stream::kind::recv::Ongoing;
 	fn extract(stream: stream::kind::Kind) -> anyhow::Result<Self::Output> {
 		match stream {
 			stream::kind::Kind::Unidirectional(recv) => Ok(recv),

@@ -9,9 +9,15 @@ use std::sync::Arc;
 /// The incoming buffer can be extracted using the [`Datagram Extractor`](Extractor).
 pub struct Opener;
 impl stream::Opener for Opener {
-	type Output = stream::kind::SendBytes;
+	type Output = stream::kind::send::Datagram;
 	fn open(connection: Arc<Connection>) -> PinFutureResult<Self::Output> {
-		Box::pin(async move { Ok(stream::kind::SendBytes(Vec::new(), connection)) })
+		Box::pin(async move {
+			use stream::kind::send::datagram::{Datagram, Local, Remote};
+			Ok(match connection.is_local() {
+				true => Datagram::Local(Local(Vec::new(), connection)),
+				false => Datagram::Remote(Remote(Vec::new(), connection)),
+			})
+		})
 	}
 }
 
@@ -19,7 +25,7 @@ impl stream::Opener for Opener {
 /// so it can be used by a [`Receiver`](stream::handler::Receiver).
 pub struct Extractor;
 impl stream::Extractor for Extractor {
-	type Output = stream::kind::RecvBytes;
+	type Output = stream::kind::recv::Datagram;
 	fn extract(stream: stream::kind::Kind) -> anyhow::Result<Self::Output> {
 		match stream {
 			stream::kind::Kind::Datagram(bytes) => Ok(bytes),

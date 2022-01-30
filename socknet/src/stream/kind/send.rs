@@ -1,11 +1,16 @@
+use crate::utility::PinFutureResultLifetime;
+
 #[doc(hidden)]
 mod write;
 pub use write::*;
 
-#[doc(hidden)]
-mod datagram;
-pub use datagram::*;
+pub mod ongoing;
+pub use ongoing::Ongoing;
 
-#[doc(hidden)]
-mod ongoing;
-pub use ongoing::*;
+pub mod datagram;
+pub use datagram::Datagram;
+
+pub trait Send {
+	/// Finishes the stream.
+	fn finish<'a>(&'a mut self) -> PinFutureResultLifetime<'a, ()>;
+}

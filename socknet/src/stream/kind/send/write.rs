@@ -8,9 +8,6 @@ pub trait Write {
 	/// Mirrors [`read_exact`](crate::stream::kind::Read::read_exact).
 	fn write_exact<'a>(&'a mut self, buf: &'a [u8]) -> PinFutureResultLifetime<'a, ()>;
 
-	/// Finishes the stream.
-	fn finish<'a>(&'a mut self) -> PinFutureResultLifetime<'a, ()>;
-
 	/// Writes a usize to the stream, encoded at a specific byte length.
 	///
 	/// Used primarily internally to write the sizes of byte vecs and generic structs to the stream.
@@ -50,7 +47,7 @@ pub trait Write {
 	fn write<'a, T>(&'a mut self, data: &'a T) -> PinFutureResultLifetime<'a, ()>
 	where
 		Self: Send,
-		T: serde::Serialize + Send + Sync,
+		T: 'static + serde::Serialize + Clone + Send + Sync,
 	{
 		Box::pin(async move {
 			// The data to be sent, in serialized to bytes

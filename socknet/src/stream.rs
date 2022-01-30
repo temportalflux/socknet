@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 /// Contains structures for the different forms of data streams.
 pub mod kind;
+pub(crate) mod local;
 
 /// API interface for creating builders for [`Receivers`](handler::Receiver) and their contexts.
 pub mod recv;

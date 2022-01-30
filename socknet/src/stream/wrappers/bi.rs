@@ -9,7 +9,7 @@ use std::sync::Arc;
 /// Calls [`open_bi`](Connection::open_bi) under the hood.
 pub struct Opener;
 impl stream::Opener for Opener {
-	type Output = (stream::kind::Send, stream::kind::Recv);
+	type Output = stream::kind::Bidirectional;
 	fn open(connection: Arc<Connection>) -> PinFutureResult<Self::Output> {
 		Box::pin(async move { connection.open_bi().await })
 	}
@@ -19,10 +19,10 @@ impl stream::Opener for Opener {
 /// so they can be used by a [`Receiver`](stream::handler::Receiver).
 pub struct Extractor;
 impl stream::Extractor for Extractor {
-	type Output = (stream::kind::Send, stream::kind::Recv);
+	type Output = stream::kind::Bidirectional;
 	fn extract(stream: stream::kind::Kind) -> anyhow::Result<Self::Output> {
 		match stream {
-			stream::kind::Kind::Bidirectional(send, recv) => Ok((send, recv)),
+			stream::kind::Kind::Bidirectional(stream) => Ok(stream),
 			_ => unimplemented!(),
 		}
 	}

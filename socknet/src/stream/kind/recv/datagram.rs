@@ -1,25 +1,26 @@
-use crate::{stream::kind::Read, utility::PinFutureResultLifetime};
+use crate::stream::{self, kind::Locality};
+
+#[doc(hidden)]
+mod remote;
+pub use remote::*;
+
+#[doc(hidden)]
+mod local;
+pub use local::*;
 
 /// An incoming buffer of bytes which was sent to this connection when
 /// [`finish`](crate::stream::kind::Write::finish) was called.
 /// Use [`read`](Read) methods can be used to receive data, which is read from a fixed array of bytes.
-pub struct RecvBytes(pub(crate) bytes::Bytes);
+pub type Datagram = Locality<Remote, Local>;
 
-impl From<bytes::Bytes> for RecvBytes {
+impl From<bytes::Bytes> for Datagram {
 	fn from(stream: bytes::Bytes) -> Self {
-		Self(stream)
+		Self::Remote(stream.into())
 	}
 }
 
-impl Read for RecvBytes {
-	/// Reads an explicit number of bytes from the stream.
-	///
-	/// This operation has no internal awaits, and
-	/// utilizes [`split_to`](bytes::Bytes::split_to) to read the next
-	/// set of bytes from the internal buffer.
-	///
-	/// Mirrors [`write_exact`](crate::stream::kind::Write::write_exact).
-	fn read_exact<'a>(&'a mut self, byte_count: usize) -> PinFutureResultLifetime<'a, Vec<u8>> {
-		Box::pin(async move { Ok(self.0.split_to(byte_count).to_vec()) })
+impl From<Vec<stream::local::AnyBox>> for Datagram {
+	fn from(stream: Vec<stream::local::AnyBox>) -> Self {
+		Self::Local(stream.into())
 	}
 }

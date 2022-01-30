@@ -1,20 +1,22 @@
-#[doc(hidden)]
-mod send;
-pub use send::*;
+use crate::stream::local;
 
-#[doc(hidden)]
-mod recv;
-pub use recv::*;
+mod locality;
+pub use locality::*;
 
-pub type Bidirectional = (Send, Recv);
+pub mod recv;
+pub use recv::{Read, Recv};
+
+pub mod send;
+pub use send::{Send, Write};
 
 /// An amalgamation of streams used by receivers.
 /// This is used internally to help ferry stream objects from connection reception through the handler registry.
 pub enum Kind {
-	Unidirectional(Recv),
-	Bidirectional(Send, Recv),
-	Datagram(RecvBytes),
+	Unidirectional(recv::Ongoing),
+	Bidirectional(Bidirectional),
+	Datagram(recv::Datagram),
 }
+pub type Bidirectional = (send::Ongoing, recv::Ongoing);
 
 impl From<quinn::RecvStream> for Kind {
 	fn from(recv_stream: quinn::RecvStream) -> Self {
@@ -24,7 +26,7 @@ impl From<quinn::RecvStream> for Kind {
 
 impl From<(quinn::SendStream, quinn::RecvStream)> for Kind {
 	fn from((send, recv): (quinn::SendStream, quinn::RecvStream)) -> Self {
-		Self::Bidirectional(send.into(), recv.into())
+		Self::Bidirectional((send.into(), recv.into()))
 	}
 }
 
@@ -34,12 +36,40 @@ impl From<bytes::Bytes> for Kind {
 	}
 }
 
+impl From<recv::ongoing::local::Internal> for Kind {
+	fn from(recv: recv::ongoing::local::Internal) -> Self {
+		Self::Unidirectional(recv.into())
+	}
+}
+
+impl
+	From<(
+		send::ongoing::local::Internal,
+		recv::ongoing::local::Internal,
+	)> for Kind
+{
+	fn from(
+		(send, recv): (
+			send::ongoing::local::Internal,
+			recv::ongoing::local::Internal,
+		),
+	) -> Self {
+		Self::Bidirectional((send.into(), recv.into()))
+	}
+}
+
+impl From<Vec<local::AnyBox>> for Kind {
+	fn from(data: Vec<local::AnyBox>) -> Self {
+		Self::Datagram(data.into())
+	}
+}
+
 impl Kind {
 	pub async fn read_handler_id(&mut self) -> anyhow::Result<String> {
 		Ok(match self {
 			Self::Unidirectional(recv) => recv.read::<String>().await?,
-			Self::Bidirectional(_send, recv) => recv.read::<String>().await?,
-			Self::Datagram(bytes) => bytes.read::<String>().await?,
+			Self::Bidirectional((_send, recv)) => recv.read::<String>().await?,
+			Self::Datagram(recv) => recv.read::<String>().await?,
 		})
 	}
 }

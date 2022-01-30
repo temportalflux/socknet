@@ -30,18 +30,56 @@ impl std::fmt::Debug for Event {
 
 pub struct Connection {
 	endpoint: Weak<Endpoint>,
-	connection: quinn::Connection,
+	connection: Internal,
 	#[allow(dead_code)]
 	handles: Arc<JoinHandleList>,
 }
 
+pub(crate) enum Datagram {
+	Serialized(bytes::Bytes),
+	Local(Vec<stream::local::AnyBox>),
+}
+impl From<bytes::Bytes> for Datagram {
+	fn from(data: bytes::Bytes) -> Self {
+		Self::Serialized(data)
+	}
+}
+impl From<Vec<stream::local::AnyBox>> for Datagram {
+	fn from(data: Vec<stream::local::AnyBox>) -> Self {
+		Self::Local(data)
+	}
+}
+
+struct LocalConnection {
+	uni_streams: stream::local::Outgoing<stream::kind::recv::ongoing::local::Internal>,
+	bi_streams: stream::local::Outgoing<(
+		stream::kind::send::ongoing::local::Internal,
+		stream::kind::recv::ongoing::local::Internal,
+	)>,
+	datagrams: stream::local::Outgoing<Vec<stream::local::AnyBox>>,
+}
+enum Internal {
+	Peer(quinn::Connection),
+	Local(LocalConnection),
+}
+
 impl Connection {
 	pub fn remote_address(&self) -> SocketAddr {
-		self.connection.remote_address()
+		match &self.connection {
+			Internal::Peer(connection) => connection.remote_address(),
+			Internal::Local(_) => self.endpoint().unwrap().address(),
+		}
 	}
 
 	pub fn peer_identity(&self) -> Option<Box<dyn std::any::Any>> {
-		self.connection.peer_identity()
+		match &self.connection {
+			Internal::Peer(connection) => connection.peer_identity(),
+			Internal::Local(_) => Some(Box::new(vec![self
+				.endpoint()
+				.unwrap()
+				.certificate()
+				.clone()])),
+		}
 	}
 
 	pub fn certificates(&self) -> anyhow::Result<Vec<rustls::Certificate>> {
@@ -86,25 +124,69 @@ impl Connection {
 		}));
 	}
 
-	pub async fn open_uni(self: &Arc<Self>) -> anyhow::Result<stream::kind::Send> {
-		let send = self.connection.open_uni().await?;
-		Ok(send.into())
+	pub fn is_local(&self) -> bool {
+		match &self.connection {
+			Internal::Peer(_) => false,
+			Internal::Local(_) => true,
+		}
+	}
+
+	pub async fn open_uni(self: &Arc<Self>) -> anyhow::Result<stream::kind::send::Ongoing> {
+		match &self.connection {
+			Internal::Peer(connection) => {
+				let send = connection.open_uni().await?;
+				Ok(send.into())
+			}
+			Internal::Local(local) => {
+				let (send, recv) = async_channel::unbounded::<stream::local::AnyBox>();
+				local.uni_streams.send(Ok(recv)).await?;
+				Ok(send.into())
+			}
+		}
 	}
 
 	pub async fn open_bi(
 		self: &Arc<Self>,
-	) -> anyhow::Result<(stream::kind::Send, stream::kind::Recv)> {
-		let (send, recv) = self.connection.open_bi().await?;
-		Ok((send.into(), recv.into()))
+	) -> anyhow::Result<(stream::kind::send::Ongoing, stream::kind::recv::Ongoing)> {
+		use stream::kind::{recv, send};
+		match &self.connection {
+			Internal::Peer(connection) => {
+				let (send, recv) = connection.open_bi().await?;
+				Ok((
+					send::Ongoing::Remote(send.into()),
+					recv::Ongoing::Remote(recv.into()),
+				))
+			}
+			Internal::Local(local) => {
+				let (a_send, b_recv) = async_channel::unbounded::<stream::local::AnyBox>();
+				let (b_send, a_recv) = async_channel::unbounded::<stream::local::AnyBox>();
+				local.bi_streams.send(Ok((b_send, b_recv))).await?;
+				Ok((
+					send::Ongoing::Local(a_send.into()),
+					recv::Ongoing::Local(a_recv.into()),
+				))
+			}
+		}
 	}
 
-	pub fn send_datagram(&self, data: bytes::Bytes) -> anyhow::Result<()> {
-		self.connection.send_datagram(data)?;
-		Ok(())
+	pub(crate) fn send_datagram(&self, datagram: Datagram) -> anyhow::Result<()> {
+		match (&self.connection, datagram) {
+			(Internal::Peer(connection), Datagram::Serialized(bytes)) => {
+				connection.send_datagram(bytes)?;
+				Ok(())
+			}
+			(Internal::Local(local), Datagram::Local(data)) => {
+				local.datagrams.try_send(Ok(data))?;
+				Ok(())
+			}
+			_ => unimplemented!(),
+		}
 	}
 
 	pub fn close(&self, code: u32, reason: &[u8]) {
-		self.connection.close(code.into(), reason);
+		if let Internal::Peer(connection) = &self.connection {
+			connection.close(code.into(), reason);
+		}
 	}
 }
 
@@ -130,24 +212,60 @@ impl Connection {
 		Ok(self.endpoint()?.stream_registry.clone())
 	}
 
-	pub(crate) fn create(endpoint: &Arc<Endpoint>, new_conn: quinn::NewConnection) -> Weak<Self> {
+	pub(crate) fn create(
+		endpoint: &Arc<Endpoint>,
+		new_conn: Option<quinn::NewConnection>,
+	) -> Weak<Self> {
 		let handles = Arc::new(JoinHandleList::with_capacity(3));
 
-		let connection = Arc::new(Self {
-			endpoint: Arc::downgrade(&endpoint),
-			connection: new_conn.connection,
-			handles,
-		});
+		let connection = match new_conn {
+			Some(new_conn) => {
+				let connection = Arc::new(Self {
+					endpoint: Arc::downgrade(&endpoint),
+					connection: Internal::Peer(new_conn.connection),
+					handles,
+				});
 
-		connection
-			.clone()
-			.spawn_stream_handler("Unidirectional", new_conn.uni_streams);
-		connection
-			.clone()
-			.spawn_stream_handler("Bidirectional", new_conn.bi_streams);
-		connection
-			.clone()
-			.spawn_stream_handler("Datagram", new_conn.datagrams);
+				connection
+					.clone()
+					.spawn_stream_handler("Unidirectional", new_conn.uni_streams);
+				connection
+					.clone()
+					.spawn_stream_handler("Bidirectional", new_conn.bi_streams);
+				connection
+					.clone()
+					.spawn_stream_handler("Datagram", new_conn.datagrams);
+
+				connection
+			}
+			None => {
+				let (send_uni, uni_streams) = async_channel::unbounded();
+				let (send_bi, bi_streams) = async_channel::unbounded();
+				let (send_data, datagrams) = async_channel::unbounded();
+
+				let connection = Arc::new(Self {
+					endpoint: Arc::downgrade(&endpoint),
+					connection: Internal::Local(LocalConnection {
+						uni_streams: send_uni,
+						bi_streams: send_bi,
+						datagrams: send_data,
+					}),
+					handles,
+				});
+
+				connection
+					.clone()
+					.spawn_stream_handler("Unidirectional", uni_streams);
+				connection
+					.clone()
+					.spawn_stream_handler("Bidirectional", bi_streams);
+				connection
+					.clone()
+					.spawn_stream_handler("Datagram", datagrams);
+
+				connection
+			}
+		};
 
 		let connection = Arc::downgrade(&connection);
 		endpoint.send_connection_event(Event::Created(connection.clone()));
