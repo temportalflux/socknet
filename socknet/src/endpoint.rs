@@ -25,6 +25,16 @@ pub struct ClientConfig {
 	pub private_key: rustls::PrivateKey,
 }
 
+impl Config {
+	pub fn fingerprint(&self) -> String {
+		use crate::utility::fingerprint;
+		match &self {
+			Self::Server(config) => fingerprint(&config.certificate),
+			Self::Client(config) => fingerprint(&config.certificate),
+		}
+	}
+}
+
 pub struct Endpoint {
 	endpoint: Arc<quinn::Endpoint>,
 	certificate: rustls::Certificate,

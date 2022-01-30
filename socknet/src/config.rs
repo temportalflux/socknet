@@ -12,7 +12,12 @@ pub struct Config {
 
 impl Config {
 	pub fn build(self) -> anyhow::Result<Arc<Endpoint>> {
-		log::info!(target: crate::LOG, "Creating network on {}", self.address);
+		log::info!(
+			target: crate::LOG,
+			"Creating network on address({}) identity({})",
+			self.address,
+			self.endpoint.fingerprint()
+		);
 		match self.endpoint {
 			endpoint::Config::Server(config) => {
 				let (endpoint, incoming) = quinn::Endpoint::server(config.core, self.address)?;
