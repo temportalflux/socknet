@@ -152,8 +152,8 @@ impl Drop for Connection {
 			"Closing connection to {}",
 			self.remote_address()
 		);
-		self.endpoint()
-			.unwrap()
-			.send_connection_event(Event::Dropped(self.remote_address()));
+		if let Ok(endpoint) = self.endpoint() {
+			endpoint.send_connection_event(Event::Dropped(self.remote_address()));
+		}
 	}
 }
