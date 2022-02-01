@@ -127,6 +127,8 @@ impl Connection {
 		let log_target = format!("{}[{} streams]", self.log_target(), kind);
 		crate::utility::spawn(log_target.clone(), async move {
 			use futures_util::StreamExt;
+			use quinn::{ApplicationClose, ConnectionError};
+			let mut close_cause = None;
 			while let Some(status) = incoming.next().await {
 				match status {
 					Ok(item) => {
@@ -134,12 +136,29 @@ impl Connection {
 						registry.create_receiver(self.clone(), item.into());
 					}
 					Err(error) => {
-						log::error!(target: &log_target, "Connection Error: {:?}", error);
+						close_cause = Some(error);
 						break;
 					}
 				}
 			}
-			log::info!(target: &log_target, "Finished receiving {} streams", kind);
+
+			let cause = match close_cause {
+				Some(error) => {
+					if let ConnectionError::ApplicationClosed(ApplicationClose {
+						error_code,
+						reason,
+					}) = &error
+					{
+						format!("by client with exit code {}", error_code)
+					} else {
+						format!("due to error: {:?}", error)
+					}
+				}
+				None => "naturally".to_owned(),
+			};
+
+			log::trace!(target: &log_target, "Incoming stream closed {}", cause);
+
 			Ok(())
 		});
 	}
@@ -156,4 +175,9 @@ impl Drop for Connection {
 			endpoint.send_connection_event(Event::Dropped(self.remote_address()));
 		}
 	}
+}
+
+#[repr(u32)]
+enum ErrorCode {
+	Natural = 0,
 }
