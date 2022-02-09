@@ -34,7 +34,6 @@ pub trait Initiator {
 		let connection = Connection::upgrade(&connection)?;
 		Ok(Box::pin(async move {
 			use stream::Identifier;
-			log::trace!(target: &connection.log_target(), "Opening stream for {}", Self::Builder::unique_id());
 			let stream =
 				<<Self::Builder as stream::send::Builder>::Opener as stream::Opener>::open(
 					connection.clone(),
