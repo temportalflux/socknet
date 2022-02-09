@@ -112,11 +112,6 @@ impl Registry {
 				.read_handler_id()
 				.await
 				.context("reading handler id")?;
-			log::trace!(
-				target: &log,
-				"Received stream with handler id {}",
-				handler_id
-			);
 			match self.builders.get(handler_id.as_str()) {
 				Some(registered) => {
 					registered.process(connection, stream)?;
