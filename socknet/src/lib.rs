@@ -1,4 +1,3 @@
-pub use crossbeam_channel as channel;
 
 pub static LOG: &'static str = "socknet";
 

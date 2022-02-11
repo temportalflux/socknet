@@ -42,10 +42,6 @@ impl JoinHandleList {
 	}
 }
 
-pub mod bytes {
-	pub use rmp_serde::{from_read_ref, to_vec};
-}
-
 pub fn spawn<T>(target: String, future: T) -> JoinHandle<()>
 where
 	T: futures::future::Future<Output = anyhow::Result<()>> + Send + 'static,
