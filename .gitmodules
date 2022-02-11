@@ -1,3 +1,0 @@
-[submodule "socknet/laminar"]
-	path = socknet/laminar
-	url = git@github.com:temportalflux/laminar.git
