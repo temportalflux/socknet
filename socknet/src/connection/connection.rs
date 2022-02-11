@@ -145,8 +145,7 @@ impl Connection {
 			let cause = match close_cause {
 				Some(error) => {
 					if let ConnectionError::ApplicationClosed(ApplicationClose {
-						error_code,
-						reason,
+						error_code, ..
 					}) = &error
 					{
 						format!("by client with exit code {}", error_code)
@@ -175,9 +174,4 @@ impl Drop for Connection {
 			endpoint.send_connection_event(Event::Dropped(self.remote_address()));
 		}
 	}
-}
-
-#[repr(u32)]
-enum ErrorCode {
-	Natural = 0,
 }
