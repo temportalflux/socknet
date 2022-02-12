@@ -5,12 +5,12 @@ use std::sync::Arc;
 /// Provided to newly created [`Receiver`](stream::handler::Receiver) structs to
 /// carry application context, connection, and stream objects.
 #[allow(type_alias_bounds)]
-pub type Context<T: Builder> = stream::Context<T, <T::Extractor as stream::Extractor>::Output>;
+pub type Context<T: AppContext> = stream::Context<T, <T::Extractor as stream::Extractor>::Output>;
 
 /// A builder for creating handlers which implement the [`Receiver`](stream::handler::Receiver) trait.
 /// Implementors must create at least 1 builder per receiver type
 /// (which may be shared with the [`Initiator`](stream::handler::Initiator) type).
-pub trait Builder: stream::Identifier {
+pub trait AppContext {
 	/// The kind of stream that this builder should create.
 	///
 	/// The type must implement the [`StreamExtractor`](stream::Extractor) trait.

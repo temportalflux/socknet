@@ -111,3 +111,54 @@ where
 		}
 	}
 }
+
+impl<RSend, LSend, RRecv, LRecv> Write for (Locality<RSend, LSend>, Locality<RRecv, LRecv>)
+where
+	RSend: Write + std::marker::Send + 'static,
+	LSend: Write + std::marker::Send + 'static,
+{
+	fn write_exact<'a>(&'a mut self, buf: &'a [u8]) -> PinFutureResultLifetime<'a, ()> {
+		self.0.write_exact(buf)
+	}
+
+	fn write_size<'a>(&'a mut self, len: usize) -> PinFutureResultLifetime<'a, ()> {
+		self.0.write_size(len)
+	}
+
+	fn write_bytes<'a>(&'a mut self, data: &'a [u8]) -> PinFutureResultLifetime<'a, ()> {
+		self.0.write_bytes(data)
+	}
+
+	fn write<'a, T>(&'a mut self, data: &'a T) -> PinFutureResultLifetime<'a, ()>
+	where
+		Self: std::marker::Send,
+		T: 'static + serde::Serialize + Clone + std::marker::Send + Sync,
+	{
+		self.0.write(data)
+	}
+}
+
+impl<RSend, LSend, RRecv, LRecv> Read for (Locality<RSend, LSend>, Locality<RRecv, LRecv>)
+where
+	RRecv: Read + std::marker::Send + 'static,
+	LRecv: Read + std::marker::Send + 'static,
+{
+	fn read_exact<'a>(&'a mut self, byte_count: usize) -> PinFutureResultLifetime<'a, Vec<u8>> {
+		self.1.read_exact(byte_count)
+	}
+
+	fn read_size<'a>(&'a mut self) -> PinFutureResultLifetime<'a, usize> {
+		self.1.read_size()
+	}
+
+	fn read_bytes<'a>(&'a mut self) -> PinFutureResultLifetime<'a, Vec<u8>> {
+		self.1.read_bytes()
+	}
+
+	fn read<'a, T>(&'a mut self) -> PinFutureResultLifetime<'a, T>
+	where
+		T: serde::de::DeserializeOwned + Sized + std::marker::Send + Sync + 'static,
+	{
+		self.1.read()
+	}
+}
