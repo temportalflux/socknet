@@ -35,7 +35,7 @@ impl Active for Local {
 	}
 
 	fn is_local(&self) -> bool {
-		false
+		true
 	}
 
 	fn open_uni<'a>(&'a self) -> PinFutureResultLifetime<'a, send::Ongoing> {
