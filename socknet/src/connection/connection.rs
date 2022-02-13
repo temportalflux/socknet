@@ -100,11 +100,10 @@ impl Connection {
 		Ok(weak.upgrade().ok_or(Error::ConnectionDropped)?)
 	}
 
-	pub fn spawn<T>(self: &Arc<Self>, future: T)
+	pub fn spawn<T>(self: &Arc<Self>, log_target: String, future: T)
 	where
 		T: futures::future::Future<Output = anyhow::Result<()>> + Send + 'static,
 	{
-		let log_target = self.log_target();
 		self.handles.push(tokio::task::spawn(async move {
 			if let Err(err) = future.await {
 				log::error!(target: &log_target, "{:?}", err);
