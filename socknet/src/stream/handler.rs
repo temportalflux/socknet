@@ -3,7 +3,7 @@ use std::sync::Weak;
 
 /// Trait implemented on a per-stream handler basis.
 /// Adds functionality to open a stream for a provided connection,
-/// automatically grabbing the [`builder`](Initiator::Builder) for the initiator,
+/// automatically grabbing the [`identifier`](Initiator::Identifier) for the initiator,
 /// and constructing the appropriate context.
 pub trait Initiator {
 	type Identifier: stream::Identifier;

@@ -6,8 +6,8 @@ use crate::{
 use std::sync::Arc;
 
 /// Creates a datagram writer for some connection, resulting in a
-/// [`buffer`](stream::kind::SendBytes) which,
-/// when [`finish`](stream::kind::Write::finish) is called,
+/// [`buffer`](stream::kind::send::Datagram) which,
+/// when [`finish`](stream::kind::Send::finish) is called,
 /// transmits the buffered data to the peer.
 ///
 /// The incoming buffer can be extracted using the [`Datagram Extractor`](Extractor).
@@ -25,7 +25,7 @@ impl stream::Opener for Opener {
 	}
 }
 
-/// Parses the incoming [`buffer`](stream::kind::RecvBytes),
+/// Parses the incoming [`buffer`](stream::kind::recv::Datagram),
 /// so it can be used by a [`Receiver`](stream::handler::Receiver).
 pub struct Extractor;
 impl stream::Extractor for Extractor {

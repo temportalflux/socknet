@@ -29,8 +29,6 @@ impl Read for Remote {
 impl Recv for Remote {
 	/// Stop accepting data. Discards unread data and notifies the peer to stop transmitting.
 	///
-	/// Mirrors [`stopped`](crate::stream::kind::Send::stopped).
-	///
 	/// See [`quinn`](quinn::RecvStream::stop) for more.
 	fn stop<'a>(&'a mut self) -> PinFutureResultLifetime<'a, ()> {
 		Box::pin(async move { Ok(self.0.stop(quinn::VarInt::from_u32(0))?) })

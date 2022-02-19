@@ -9,7 +9,7 @@ pub(crate) mod local;
 pub use local::Local;
 
 /// An incoming stream that can continue to read data as long as the connection is available.
-/// Once opened, [`read`](Read) methods can be used to receive data.
+/// Once opened, [`read`](super::Read) methods can be used to receive data.
 pub type Ongoing = Locality<Remote, Local>;
 
 impl From<quinn::RecvStream> for Ongoing {

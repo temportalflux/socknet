@@ -1,7 +1,6 @@
 use crate::utility::PinFutureResultLifetime;
 
-/// Local interface for providing the same async-write functionality to both
-/// [`ongoing`](crate::stream::kind::Send) and [`datagram`](crate::stream::kind::SendBytes) streams.
+/// Local interface for providing the async-write functionality to streams.
 pub trait Write {
 	/// Writes all of the provided bytes to the stream.
 	///

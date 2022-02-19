@@ -9,8 +9,8 @@ mod local;
 pub use local::*;
 
 /// An incoming buffer of bytes which was sent to this connection when
-/// [`finish`](crate::stream::kind::Write::finish) was called.
-/// Use [`read`](Read) methods can be used to receive data, which is read from a fixed array of bytes.
+/// [`finish`](crate::stream::kind::Send::finish) was called.
+/// Use [`read`](super::Read) methods can be used to receive data, which is read from a fixed array of bytes.
 pub type Datagram = Locality<Remote, Local>;
 
 impl From<bytes::Bytes> for Datagram {

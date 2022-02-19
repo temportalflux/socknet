@@ -9,7 +9,7 @@ pub(crate) mod local;
 pub use local::Local;
 
 /// An outgoing stream that can continue to send data as long as the connection is available.
-/// Once opened, [`write`](Write) methods can be used to transmit data.
+/// Once opened, [`write`](super::Write) methods can be used to transmit data.
 pub type Ongoing = Locality<Remote, Local>;
 
 impl From<quinn::SendStream> for Ongoing {

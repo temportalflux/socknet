@@ -41,7 +41,7 @@ impl Registered {
 	}
 }
 
-/// Repository of [`builders`](stream::recv::Builder) for [`receivers`](stream::handler::Receiver).
+/// Repository of stream identifiers.
 ///
 /// Used to read the [`unique_id`](stream::Identifier::unique_id) from an incoming stream
 /// and hand off the stream handling to a unique receiver of a given type.
@@ -59,7 +59,7 @@ impl Default for Registry {
 }
 
 impl Registry {
-	/// Registers some [`builder`](stream::recv::Builder) so that it can create a
+	/// Registers some [`identifier`](stream::Identifier) so that it can create a
 	/// [`receiver`](stream::handler::Receiver) when a packet with the provided id is received.
 	pub fn register<T>(&mut self, identifier: T)
 	where

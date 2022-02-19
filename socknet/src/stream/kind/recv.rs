@@ -12,7 +12,5 @@ pub use datagram::Datagram;
 
 pub trait Recv {
 	/// Stop accepting data. Discards unread data and notifies the peer to stop transmitting.
-	///
-	/// Mirrors [`stopped`](crate::stream::kind::Send::stopped).
 	fn stop<'a>(&'a mut self) -> PinFutureResultLifetime<'a, ()>;
 }

@@ -1,7 +1,6 @@
 use crate::utility::PinFutureResultLifetime;
 
-/// Local interface for providing the same async-read functionality to both
-/// [`ongoing`](crate::stream::kind::Recv) and [`datagram`](crate::stream::kind::RecvBytes) streams.
+/// Local interface for providing the async-read functionality to recv streams.
 pub trait Read {
 	/// Reads an explicit number of bytes from the stream.
 	///
